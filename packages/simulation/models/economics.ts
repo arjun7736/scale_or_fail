@@ -7,6 +7,12 @@ import {
   CdnNodeConfig,
   RateLimiterNodeConfig,
   ClientNodeConfig,
+  DbShardingNodeConfig,
+  KafkaStreamNodeConfig,
+  AnycastEdgeNodeConfig,
+  CircuitBreakerNodeConfig,
+  L4MaglevNodeConfig,
+  DistributedNosqlNodeConfig,
 } from '../core/types';
 
 export const SERVER_TIERS: Record<
@@ -158,6 +164,48 @@ export const DEFAULT_CONFIGS = {
     maxAllowedRps: 50000,
     burstAllowance: 1.25,
     costPerHour: 0.02,
+  }),
+  db_sharding: (): DbShardingNodeConfig => ({
+    name: 'Database Sharding Router',
+    shardsCount: 4,
+    algorithm: 'hash',
+    writeThroughputMultiplier: 3.5,
+    costPerHour: 0.25,
+  }),
+  kafka_stream: (): KafkaStreamNodeConfig => ({
+    name: 'Kafka Event Stream',
+    partitionsCount: 8,
+    maxRps: 500000,
+    retentionHours: 24,
+    costPerHour: 0.18,
+  }),
+  anycast_edge: (): AnycastEdgeNodeConfig => ({
+    name: 'Global Anycast Edge Router',
+    edgePops: 64,
+    latencyReductionMs: 35,
+    geoRouting: true,
+    costPerHour: 0.15,
+  }),
+  circuit_breaker: (): CircuitBreakerNodeConfig => ({
+    name: 'Adaptive Load Shedder',
+    thresholdPercent: 90,
+    recoverySeconds: 15,
+    sheddingRatio: 0.25,
+    costPerHour: 0.03,
+  }),
+  l4_maglev: (): L4MaglevNodeConfig => ({
+    name: 'Kernel-Bypass L4 (Maglev/DSR)',
+    algorithm: 'maglev_hash',
+    maxPacketsPerSec: 5000000,
+    directServerReturn: true,
+    costPerHour: 0.12,
+  }),
+  distributed_nosql: (): DistributedNosqlNodeConfig => ({
+    name: 'Distributed NoSQL Cluster',
+    replicationFactor: 3,
+    consistencyLevel: 'quorum',
+    maxWriteIops: 250000,
+    costPerHour: 0.35,
   }),
 };
 

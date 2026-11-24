@@ -10,7 +10,13 @@ export type ComponentType =
   | 'redis_cache'
   | 'message_queue'
   | 'cdn'
-  | 'rate_limiter';
+  | 'rate_limiter'
+  | 'db_sharding'
+  | 'kafka_stream'
+  | 'anycast_edge'
+  | 'circuit_breaker'
+  | 'l4_maglev'
+  | 'distributed_nosql';
 
 export type ComponentHealth = 'healthy' | 'warning' | 'critical' | 'failed' | 'offline';
 
@@ -79,6 +85,42 @@ export interface RateLimiterNodeConfig extends BaseNodeConfig {
   burstAllowance: number;
 }
 
+export interface DbShardingNodeConfig extends BaseNodeConfig {
+  shardsCount: number;
+  algorithm: 'hash' | 'range';
+  writeThroughputMultiplier: number;
+}
+
+export interface KafkaStreamNodeConfig extends BaseNodeConfig {
+  partitionsCount: number;
+  maxRps: number;
+  retentionHours: number;
+}
+
+export interface AnycastEdgeNodeConfig extends BaseNodeConfig {
+  edgePops: number;
+  latencyReductionMs: number;
+  geoRouting: boolean;
+}
+
+export interface CircuitBreakerNodeConfig extends BaseNodeConfig {
+  thresholdPercent: number;
+  recoverySeconds: number;
+  sheddingRatio: number;
+}
+
+export interface L4MaglevNodeConfig extends BaseNodeConfig {
+  algorithm: 'maglev_hash' | 'ecmp';
+  maxPacketsPerSec: number;
+  directServerReturn: boolean;
+}
+
+export interface DistributedNosqlNodeConfig extends BaseNodeConfig {
+  replicationFactor: number;
+  consistencyLevel: 'one' | 'quorum' | 'all';
+  maxWriteIops: number;
+}
+
 export type NodeConfigMap = {
   client: ClientNodeConfig;
   load_balancer: LoadBalancerNodeConfig;
@@ -88,6 +130,12 @@ export type NodeConfigMap = {
   message_queue: MessageQueueNodeConfig;
   cdn: CdnNodeConfig;
   rate_limiter: RateLimiterNodeConfig;
+  db_sharding: DbShardingNodeConfig;
+  kafka_stream: KafkaStreamNodeConfig;
+  anycast_edge: AnycastEdgeNodeConfig;
+  circuit_breaker: CircuitBreakerNodeConfig;
+  l4_maglev: L4MaglevNodeConfig;
+  distributed_nosql: DistributedNosqlNodeConfig;
 };
 
 export interface ArchitectureNode<T extends ComponentType = ComponentType> {

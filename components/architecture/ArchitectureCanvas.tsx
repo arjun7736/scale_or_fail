@@ -88,6 +88,8 @@ function CanvasInternal() {
         fitViewOptions={{ padding: 0.35 }}
         minZoom={0.2}
         maxZoom={1.8}
+        deleteKeyCode={['Backspace', 'Delete']}
+        edgesFocusable={true}
         proOptions={{ hideAttribution: true }}
       >
         <Background

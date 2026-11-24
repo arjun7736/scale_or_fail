@@ -13,6 +13,11 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Gauge,
+  Boxes,
+  Activity,
+  Globe,
+  ShieldAlert,
+  Network,
 } from 'lucide-react';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { useGameStore } from '@/stores/gameStore';
@@ -24,15 +29,23 @@ import {
   LoadBalancerNodeConfig,
   RateLimiterNodeConfig,
   MessageQueueNodeConfig,
+  DbShardingNodeConfig,
+  KafkaStreamNodeConfig,
+  AnycastEdgeNodeConfig,
+  CircuitBreakerNodeConfig,
+  L4MaglevNodeConfig,
+  DistributedNosqlNodeConfig,
 } from '@/packages/simulation/core/types';
 
 export function NodeConfigDrawer() {
   const selectedNodeId = useArchitectureStore((s) => s.selectedNodeId);
   const selectNode = useArchitectureStore((s) => s.selectNode);
   const removeNode = useArchitectureStore((s) => s.removeNode);
+  const removeEdge = useArchitectureStore((s) => s.removeEdge);
   const updateNodeConfig = useArchitectureStore((s) => s.updateNodeConfig);
 
   const nodes = useArchitectureStore((s) => s.nodes);
+  const edges = useArchitectureStore((s) => s.edges);
   const updateNodeConfigInGame = useGameStore((s) => s.updateNodeConfigInGame);
   const syncGraph = useGameStore((s) => s.syncGraph);
   const componentMetrics = useGameStore((s) =>
@@ -43,6 +56,9 @@ export function NodeConfigDrawer() {
 
   const node = nodes.find((n) => n.id === selectedNodeId);
   if (!node) return null;
+
+  const incomingEdges = edges.filter((e) => e.target === selectedNodeId);
+  const outgoingEdges = edges.filter((e) => e.source === selectedNodeId);
 
   const type = node.type || node.data?.type;
   const config = node.data?.config as any;
@@ -115,6 +131,61 @@ export function NodeConfigDrawer() {
           </div>
         </div>
       )}
+
+      {/* Connected Links & Disconnect Controls */}
+      <div className="p-3 bg-slate-950/40 border-b border-slate-800 space-y-1.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-mono flex items-center justify-between">
+          <span>Connected Network Links ({incomingEdges.length + outgoingEdges.length})</span>
+        </div>
+
+        {incomingEdges.length === 0 && outgoingEdges.length === 0 ? (
+          <p className="text-[10px] text-slate-500 font-mono italic">No connected links</p>
+        ) : (
+          <div className="space-y-1.5 font-mono text-[10px]">
+            {incomingEdges.map((e) => {
+              const srcNode = nodes.find((n) => n.id === e.source);
+              return (
+                <div key={e.id} className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
+                  <span className="text-slate-300 truncate max-w-[170px]">
+                    ← From: <strong className="text-teal-400 font-normal">{(srcNode?.data?.label as string) || e.source}</strong>
+                  </span>
+                  <button
+                    onClick={() => {
+                      removeEdge(e.id);
+                      setTimeout(() => syncGraph(), 30);
+                    }}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[9px] font-semibold transition-colors"
+                    title="Disconnect this link"
+                  >
+                    <X className="h-2.5 w-2.5" /> Disconnect
+                  </button>
+                </div>
+              );
+            })}
+
+            {outgoingEdges.map((e) => {
+              const tgtNode = nodes.find((n) => n.id === e.target);
+              return (
+                <div key={e.id} className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
+                  <span className="text-slate-300 truncate max-w-[170px]">
+                    → To: <strong className="text-purple-400 font-normal">{(tgtNode?.data?.label as string) || e.target}</strong>
+                  </span>
+                  <button
+                    onClick={() => {
+                      removeEdge(e.id);
+                      setTimeout(() => syncGraph(), 30);
+                    }}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[9px] font-semibold transition-colors"
+                    title="Disconnect this link"
+                  >
+                    <X className="h-2.5 w-2.5" /> Disconnect
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Configuration Controls */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
@@ -367,6 +438,150 @@ export function NodeConfigDrawer() {
                     }`}
                   >
                     {w}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DB SHARDING CONFIG */}
+        {type === 'db_sharding' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <Boxes className="h-3.5 w-3.5 text-pink-400" /> Number of Database Shards
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[2, 4, 8, 16].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleUpdate({ shardsCount: s, writeThroughputMultiplier: s * 0.9, costPerHour: 0.10 + s * 0.04 })}
+                    className={`p-2 rounded-lg border text-center font-mono ${
+                      (config as DbShardingNodeConfig).shardsCount === s
+                        ? 'border-pink-500 bg-pink-500/10 text-white'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                    }`}
+                  >
+                    {s} Shards
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* KAFKA STREAM CONFIG */}
+        {type === 'kafka_stream' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-amber-400" /> Log Partitions
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[4, 8, 16, 32].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleUpdate({ partitionsCount: p, maxRps: p * 60000, costPerHour: 0.10 + p * 0.01 })}
+                    className={`p-2 rounded-lg border text-center font-mono ${
+                      (config as KafkaStreamNodeConfig).partitionsCount === p
+                        ? 'border-amber-500 bg-amber-500/10 text-white'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ANYCAST GEODNS CONFIG */}
+        {type === 'anycast_edge' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-cyan-400" /> Edge POPs Deployment
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[16, 32, 64, 128].map((pops) => (
+                  <button
+                    key={pops}
+                    onClick={() => handleUpdate({ edgePops: pops, latencyReductionMs: Math.min(50, 15 + Math.round(pops * 0.3)), costPerHour: 0.05 + pops * 0.002 })}
+                    className={`p-2 rounded-lg border text-center font-mono ${
+                      (config as AnycastEdgeNodeConfig).edgePops === pops
+                        ? 'border-cyan-500 bg-cyan-500/10 text-white'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                    }`}
+                  >
+                    {pops} POPs
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CIRCUIT BREAKER CONFIG */}
+        {type === 'circuit_breaker' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-400" /> Trip Threshold (% CPU)
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[80, 85, 90, 95].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => handleUpdate({ thresholdPercent: t })}
+                    className={`p-2 rounded-lg border text-center font-mono ${
+                      (config as CircuitBreakerNodeConfig).thresholdPercent === t
+                        ? 'border-rose-500 bg-rose-500/10 text-white'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                    }`}
+                  >
+                    {t}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* L4 MAGLEV CONFIG */}
+        {type === 'l4_maglev' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <Network className="h-3.5 w-3.5 text-emerald-400" /> Packet Forwarding Mode
+              </label>
+              <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-mono text-[11px]">
+                Direct Server Return (DSR) enabled via eBPF/XDP. Backends respond directly to clients, bypassing proxy return bandwidth.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DISTRIBUTED NOSQL CONFIG */}
+        {type === 'distributed_nosql' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-slate-400 font-medium mb-1.5 flex items-center gap-1.5">
+                <HardDrive className="h-3.5 w-3.5 text-violet-400" /> Consistency Level
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['one', 'quorum', 'all'] as const).map((lvl) => (
+                  <button
+                    key={lvl}
+                    onClick={() => handleUpdate({ consistencyLevel: lvl })}
+                    className={`p-2 rounded-lg border text-center font-mono uppercase ${
+                      (config as DistributedNosqlNodeConfig).consistencyLevel === lvl
+                        ? 'border-violet-500 bg-violet-500/10 text-white'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
+                    }`}
+                  >
+                    {lvl}
                   </button>
                 ))}
               </div>

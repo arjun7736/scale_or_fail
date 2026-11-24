@@ -129,13 +129,31 @@ export function routeTrafficThroughGraph(
     }
   };
 
-  // 1. Edge Layer: CDN (Edge cache)
+  // 1. Edge Layer: Anycast Edge Router
   const clientOutEdges = outgoingEdges.get(clientNode.id) || [];
-  const cdnEdge = clientOutEdges.find((e) => nodeMap.get(e.target)?.type === 'cdn');
-  const cdnNode = cdnEdge ? nodeMap.get(cdnEdge.target) : undefined;
-
-  let cdnAbsorbedRps = 0;
   let nextIngressEdges = clientOutEdges;
+
+  const anycastEdge = nextIngressEdges.find((e) => nodeMap.get(e.target)?.type === 'anycast_edge');
+  const anycastNode = anycastEdge ? nodeMap.get(anycastEdge.target) : undefined;
+  let anycastLatencyOffset = 0;
+
+  if (anycastNode && anycastNode.type === 'anycast_edge') {
+    const anycastCfg = anycastNode.config as import('../core/types').AnycastEdgeNodeConfig;
+    anycastLatencyOffset = anycastCfg.latencyReductionMs || 25;
+    componentMetrics[anycastNode.id].throughputInRps = currentTrafficRps;
+    componentMetrics[anycastNode.id].throughputOutRps = currentTrafficRps;
+    componentMetrics[anycastNode.id].cpuUtilization = Math.min(100, Math.round((currentTrafficRps / 5000000) * 100));
+    componentMetrics[anycastNode.id].avgLatencyMs = 2;
+    componentMetrics[anycastNode.id].p95LatencyMs = 4;
+    componentMetrics[anycastNode.id].statusMessage = `Anycast BGP active: ${anycastCfg.edgePops} global POPs • Latency -${anycastLatencyOffset}ms`;
+    recordEdgeFlow(clientNode.id, anycastNode.id, currentTrafficRps, 2, 'healthy');
+    nextIngressEdges = outgoingEdges.get(anycastNode.id) || [];
+  }
+
+  // Edge Layer: CDN (Edge cache)
+  const cdnEdge = nextIngressEdges.find((e) => nodeMap.get(e.target)?.type === 'cdn');
+  const cdnNode = cdnEdge ? nodeMap.get(cdnEdge.target) : undefined;
+  let cdnAbsorbedRps = 0;
 
   if (cdnNode && cdnNode.type === 'cdn') {
     const cdnConfig = cdnNode.config as import('../core/types').CdnNodeConfig;
@@ -149,7 +167,8 @@ export function routeTrafficThroughGraph(
     componentMetrics[cdnNode.id].p95LatencyMs = 12;
     componentMetrics[cdnNode.id].statusMessage = `Edge Cache Hit: ${Math.round(cdnConfig.cacheHitRatio * 100)}% (Absorbed ${cdnAbsorbedRps} RPS)`;
 
-    recordEdgeFlow(clientNode.id, cdnNode.id, traffic.totalRps, 8, 'healthy');
+    const prevSource = anycastNode ? anycastNode.id : clientNode.id;
+    recordEdgeFlow(prevSource, cdnNode.id, traffic.totalRps, 8, 'healthy');
     nextIngressEdges = outgoingEdges.get(cdnNode.id) || [];
   }
 
@@ -175,9 +194,58 @@ export function routeTrafficThroughGraph(
     componentMetrics[rateLimiterNode.id].droppedRps = rateLimitDroppedRps;
     componentMetrics[rateLimiterNode.id].throughputOutRps = currentTrafficRps;
 
-    const ingressSource = cdnNode ? cdnNode.id : clientNode.id;
+    const ingressSource = cdnNode ? cdnNode.id : anycastNode ? anycastNode.id : clientNode.id;
     recordEdgeFlow(ingressSource, rateLimiterNode.id, componentMetrics[rateLimiterNode.id].throughputInRps, 2, rateLimitDroppedRps > 0 ? 'warning' : 'healthy');
     nextIngressEdges = outgoingEdges.get(rateLimiterNode.id) || [];
+  }
+
+  // 2b. Kernel-Bypass Ingress: L4 Maglev / Katran (Direct Server Return)
+  const maglevEdge = nextIngressEdges.find((e) => nodeMap.get(e.target)?.type === 'l4_maglev');
+  const maglevNode = maglevEdge ? nodeMap.get(maglevEdge.target) : undefined;
+
+  if (maglevNode && maglevNode.type === 'l4_maglev') {
+    const maglevCfg = maglevNode.config as import('../core/types').L4MaglevNodeConfig;
+    componentMetrics[maglevNode.id].throughputInRps = currentTrafficRps;
+    componentMetrics[maglevNode.id].throughputOutRps = currentTrafficRps;
+    const maglevUtil = currentTrafficRps / Math.max(1, maglevCfg.maxPacketsPerSec);
+    componentMetrics[maglevNode.id].cpuUtilization = Math.min(100, Math.round(maglevUtil * 100));
+    componentMetrics[maglevNode.id].avgLatencyMs = 1;
+    componentMetrics[maglevNode.id].p95LatencyMs = 2;
+    componentMetrics[maglevNode.id].statusMessage = `L4 Direct Server Return (DSR) active • ${Math.round(currentTrafficRps).toLocaleString()} pps`;
+    const ingressSource = rateLimiterNode ? rateLimiterNode.id : cdnNode ? cdnNode.id : anycastNode ? anycastNode.id : clientNode.id;
+    recordEdgeFlow(ingressSource, maglevNode.id, currentTrafficRps, 1, 'healthy');
+    nextIngressEdges = outgoingEdges.get(maglevNode.id) || [];
+  }
+
+  // 2c. Fault Tolerance: Adaptive Circuit Breaker / Load Shedder
+  const cbEdge = nextIngressEdges.find((e) => nodeMap.get(e.target)?.type === 'circuit_breaker');
+  const circuitBreakerNode = cbEdge ? nodeMap.get(cbEdge.target) : undefined;
+  let circuitBreakerShedRps = 0;
+
+  if (circuitBreakerNode && circuitBreakerNode.type === 'circuit_breaker') {
+    const cbCfg = circuitBreakerNode.config as import('../core/types').CircuitBreakerNodeConfig;
+    componentMetrics[circuitBreakerNode.id].throughputInRps = currentTrafficRps;
+
+    const isSystemDegraded = previousComponentMetrics && Object.values(previousComponentMetrics).some(
+      (m) => (m.type === 'app_server' || m.type === 'database') && (m.cpuUtilization > cbCfg.thresholdPercent || m.health === 'critical' || m.health === 'failed')
+    );
+
+    if (isSystemDegraded) {
+      circuitBreakerShedRps = Math.floor(currentTrafficRps * (cbCfg.sheddingRatio || 0.3));
+      currentTrafficRps = Math.max(0, currentTrafficRps - circuitBreakerShedRps);
+      componentMetrics[circuitBreakerNode.id].health = 'warning';
+      componentMetrics[circuitBreakerNode.id].statusMessage = `Tripped! Shedding ${circuitBreakerShedRps.toLocaleString()} non-critical RPS to protect core cluster`;
+      componentMetrics[circuitBreakerNode.id].droppedRps = circuitBreakerShedRps;
+    } else {
+      componentMetrics[circuitBreakerNode.id].health = 'healthy';
+      componentMetrics[circuitBreakerNode.id].statusMessage = 'Circuit Closed: Healthy throughput pass';
+      componentMetrics[circuitBreakerNode.id].droppedRps = 0;
+    }
+
+    componentMetrics[circuitBreakerNode.id].throughputOutRps = currentTrafficRps;
+    const prevSrc = maglevNode ? maglevNode.id : rateLimiterNode ? rateLimiterNode.id : cdnNode ? cdnNode.id : anycastNode ? anycastNode.id : clientNode.id;
+    recordEdgeFlow(prevSrc, circuitBreakerNode.id, componentMetrics[circuitBreakerNode.id].throughputInRps, 1, circuitBreakerShedRps > 0 ? 'warning' : 'healthy');
+    nextIngressEdges = outgoingEdges.get(circuitBreakerNode.id) || [];
   }
 
   // 3. Ingress Layer: Load Balancer(s) or Direct to App Servers
@@ -189,7 +257,17 @@ export function routeTrafficThroughGraph(
     const lb = nodeMap.get(lbEdge.target)!;
     const lbConfig = lb.config as import('../core/types').LoadBalancerNodeConfig;
 
-    const ingressSource = rateLimiterNode ? rateLimiterNode.id : cdnNode ? cdnNode.id : clientNode.id;
+    const ingressSource = circuitBreakerNode
+      ? circuitBreakerNode.id
+      : maglevNode
+      ? maglevNode.id
+      : rateLimiterNode
+      ? rateLimiterNode.id
+      : cdnNode
+      ? cdnNode.id
+      : anycastNode
+      ? anycastNode.id
+      : clientNode.id;
     recordEdgeFlow(ingressSource, lb.id, currentTrafficRps, 2, 'healthy');
 
     componentMetrics[lb.id].throughputInRps = currentTrafficRps;
@@ -333,6 +411,7 @@ export function routeTrafficThroughGraph(
     connectedCaches: ArchitectureNode[];
     connectedQueues: ArchitectureNode[];
     connectedDbs: ArchitectureNode[];
+    shardingRouters?: ArchitectureNode[];
     isStorageDisconnected: boolean;
   }
 
@@ -346,14 +425,19 @@ export function routeTrafficThroughGraph(
 
     const sOutEdges = outgoingEdges.get(server.id) || [];
     const connectedCaches = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'redis_cache');
-    const connectedQueues = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'message_queue');
-    const directDbs = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'database');
+    const connectedQueues = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && (n.type === 'message_queue' || n.type === 'kafka_stream'));
+    const directDbs = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && (n.type === 'database' || n.type === 'distributed_nosql'));
+    const shardingRouters = sOutEdges.map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'db_sharding');
 
-    // Also check if Caches connected to S connect to Databases
-    const cacheDbs = connectedCaches.flatMap((c) =>
-      (outgoingEdges.get(c.id) || []).map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'database')
+    // Also check if Sharding routers connect to databases
+    const shardedDbs = shardingRouters.flatMap((sr) =>
+      (outgoingEdges.get(sr.id) || []).map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'database')
     );
-    const allConnectedDbs = Array.from(new Set([...directDbs, ...cacheDbs]));
+    // Also check if Caches connected to S connect to Databases or Sharding Routers
+    const cacheDbs = connectedCaches.flatMap((c) =>
+      (outgoingEdges.get(c.id) || []).map((e) => nodeMap.get(e.target)!).filter((n) => n && (n.type === 'database' || n.type === 'db_sharding' || n.type === 'distributed_nosql'))
+    );
+    const allConnectedDbs = Array.from(new Set([...directDbs, ...cacheDbs, ...shardedDbs]));
 
     const isStorageDisconnected = allConnectedDbs.length === 0 && connectedCaches.length === 0;
 
@@ -366,6 +450,7 @@ export function routeTrafficThroughGraph(
       connectedCaches,
       connectedQueues,
       connectedDbs: allConnectedDbs,
+      shardingRouters,
       isStorageDisconnected,
     });
   }
@@ -427,6 +512,20 @@ export function routeTrafficThroughGraph(
     const qNode = nodeMap.get(qId);
     if (!qNode || demandRps <= 0) continue;
 
+    if (qNode.type === 'kafka_stream') {
+      const kConfig = qNode.config as import('../core/types').KafkaStreamNodeConfig;
+      const kCap = kConfig.maxRps || 500000;
+      const kUtil = Math.min(100, Math.round((demandRps / kCap) * 100));
+      componentMetrics[qId].throughputInRps = demandRps;
+      componentMetrics[qId].throughputOutRps = demandRps;
+      componentMetrics[qId].cpuUtilization = kUtil;
+      componentMetrics[qId].avgLatencyMs = 2;
+      componentMetrics[qId].p95LatencyMs = 5;
+      componentMetrics[qId].statusMessage = `Kafka log streaming ${demandRps.toLocaleString()} events/s across ${kConfig.partitionsCount} partitions`;
+      componentMetrics[qId].health = kUtil > 90 ? 'warning' : 'healthy';
+      continue;
+    }
+
     const qConfig = qNode.config as import('../core/types').MessageQueueNodeConfig;
     const qRes = calculateQueueCapacity(qConfig, demandRps);
 
@@ -450,14 +549,48 @@ export function routeTrafficThroughGraph(
   for (const ctx of serverContexts) {
     if (ctx.isStorageDisconnected) continue;
 
+    // Check Distributed NoSQL (Masterless quorum storage)
+    const nosqlCluster = ctx.connectedDbs.find((d) => d.type === 'distributed_nosql');
+    if (nosqlCluster) {
+      const nCfg = nosqlCluster.config as import('../core/types').DistributedNosqlNodeConfig;
+      const totalNosqlRps = ctx.writesRps + (ctx.connectedCaches.length > 0 ? Math.floor(ctx.readsRps * 0.15) : ctx.readsRps);
+      const nUtil = Math.min(100, Math.round((totalNosqlRps / Math.max(1, nCfg.maxWriteIops)) * 100));
+      componentMetrics[nosqlCluster.id].throughputInRps = totalNosqlRps;
+      componentMetrics[nosqlCluster.id].throughputOutRps = totalNosqlRps;
+      componentMetrics[nosqlCluster.id].cpuUtilization = nUtil;
+      componentMetrics[nosqlCluster.id].avgLatencyMs = 3;
+      componentMetrics[nosqlCluster.id].p95LatencyMs = 6;
+      componentMetrics[nosqlCluster.id].statusMessage = `Masterless Quorum (${nCfg.consistencyLevel.toUpperCase()}) • RF=${nCfg.replicationFactor} • Horizontal Linear Scale`;
+      componentMetrics[nosqlCluster.id].health = nUtil > 90 ? 'warning' : 'healthy';
+      recordEdgeFlow(ctx.server.id, nosqlCluster.id, totalNosqlRps, 3, 'healthy');
+      continue;
+    }
+
+    // Check Sharding Router
+    const shardingRouter = ctx.shardingRouters && ctx.shardingRouters.length > 0 ? ctx.shardingRouters[0] : undefined;
+    let effectiveWrites = ctx.writesRps;
+
+    if (shardingRouter) {
+      const sCfg = shardingRouter.config as import('../core/types').DbShardingNodeConfig;
+      const shards = sCfg.shardsCount || 4;
+      effectiveWrites = Math.max(1, Math.floor(ctx.writesRps / shards));
+      componentMetrics[shardingRouter.id].throughputInRps = ctx.writesRps;
+      componentMetrics[shardingRouter.id].throughputOutRps = ctx.writesRps;
+      componentMetrics[shardingRouter.id].cpuUtilization = Math.min(100, Math.round((ctx.writesRps / (shards * 40000)) * 100));
+      componentMetrics[shardingRouter.id].statusMessage = `Hash partitioning across ${shards} DB shards (Write IOPS /${shards})`;
+      componentMetrics[shardingRouter.id].health = 'healthy';
+      recordEdgeFlow(ctx.server.id, shardingRouter.id, ctx.writesRps, 2, 'healthy');
+    }
+
     // Writes must hit Primary DB
     const primaryDb = ctx.connectedDbs.find((d) => (d.config as import('../core/types').DatabaseNodeConfig).role === 'primary');
     if (primaryDb) {
-      // If server is connected to MQ, heavy writes are offloaded
-      const netWrites = ctx.connectedQueues.length > 0 ? Math.floor(ctx.writesRps * 0.7) : ctx.writesRps;
+      // If server is connected to MQ/Kafka, heavy writes are offloaded
+      const netWrites = ctx.connectedQueues.length > 0 ? Math.floor(effectiveWrites * 0.7) : effectiveWrites;
       dbWriteDemandMap.set(primaryDb.id, (dbWriteDemandMap.get(primaryDb.id) || 0) + netWrites);
       dbThreadDemandMap.set(primaryDb.id, (dbThreadDemandMap.get(primaryDb.id) || 0) + 15);
-      recordEdgeFlow(ctx.server.id, primaryDb.id, netWrites, 12, 'healthy');
+      const writeSource = shardingRouter ? shardingRouter.id : ctx.server.id;
+      recordEdgeFlow(writeSource, primaryDb.id, netWrites, 12, 'healthy');
     }
 
     // Direct reads (reads not absorbed by Redis)
@@ -655,8 +788,8 @@ export function routeTrafficThroughGraph(
       succeededRps: totalSucceededRps,
       failedRps: totalFailedRps,
       inFlightRequests: queueingResult.inFlightRequests,
-      avgLatencyMs: Math.round(queueingResult.avgLatencyMs),
-      p95LatencyMs: Math.round(queueingResult.p95LatencyMs),
+      avgLatencyMs: Math.max(2, Math.round(queueingResult.avgLatencyMs - anycastLatencyOffset)),
+      p95LatencyMs: Math.max(4, Math.round(queueingResult.p95LatencyMs - anycastLatencyOffset)),
       errorRate: totalErrorRate,
       systemHealth,
     },

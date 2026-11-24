@@ -31,6 +31,7 @@ export interface ArchitectureState {
   selectNode: (nodeId: string | null) => void;
   addNode: (type: ComponentType, position?: { x: number; y: number }) => ArchitectureNode;
   removeNode: (nodeId: string) => void;
+  removeEdge: (edgeId: string) => void;
   updateNodeConfig: (nodeId: string, newConfig: Partial<ArchitectureNode['config']>) => void;
   setGraph: (graph: ArchitectureGraph) => void;
   resetToStarter: () => void;
@@ -135,6 +136,30 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
           config = DEFAULT_CONFIGS.rate_limiter();
           label = 'Rate Limiter';
           break;
+        case 'db_sharding':
+          config = DEFAULT_CONFIGS.db_sharding();
+          label = 'DB Sharding Router';
+          break;
+        case 'kafka_stream':
+          config = DEFAULT_CONFIGS.kafka_stream();
+          label = 'Kafka Stream';
+          break;
+        case 'anycast_edge':
+          config = DEFAULT_CONFIGS.anycast_edge();
+          label = 'Anycast GeoDNS';
+          break;
+        case 'circuit_breaker':
+          config = DEFAULT_CONFIGS.circuit_breaker();
+          label = 'Circuit Breaker';
+          break;
+        case 'l4_maglev':
+          config = DEFAULT_CONFIGS.l4_maglev();
+          label = 'L4 Maglev (DSR)';
+          break;
+        case 'distributed_nosql':
+          config = DEFAULT_CONFIGS.distributed_nosql();
+          label = 'Distributed NoSQL';
+          break;
         default:
           config = DEFAULT_CONFIGS.client();
           label = 'Traffic Ingress';
@@ -177,6 +202,12 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         nodes: state.nodes.filter((n) => n.id !== nodeId),
         edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
         selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+      }));
+    },
+
+    removeEdge: (edgeId) => {
+      set((state) => ({
+        edges: state.edges.filter((e) => e.id !== edgeId),
       }));
     },
 

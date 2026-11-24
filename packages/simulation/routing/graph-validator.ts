@@ -14,14 +14,20 @@ export interface ValidationResult {
 }
 
 const ALLOWED_CONNECTIONS: Record<ComponentType, ComponentType[]> = {
-  client: ['cdn', 'rate_limiter', 'load_balancer', 'app_server'],
-  cdn: ['rate_limiter', 'load_balancer', 'app_server'],
-  rate_limiter: ['load_balancer', 'app_server'],
-  load_balancer: ['app_server'],
-  app_server: ['database', 'redis_cache', 'message_queue'],
-  redis_cache: ['database'],
-  message_queue: ['database', 'app_server'],
+  client: ['anycast_edge', 'cdn', 'rate_limiter', 'l4_maglev', 'load_balancer', 'app_server'],
+  anycast_edge: ['cdn', 'rate_limiter', 'l4_maglev', 'load_balancer', 'app_server'],
+  cdn: ['rate_limiter', 'l4_maglev', 'load_balancer', 'app_server'],
+  rate_limiter: ['l4_maglev', 'load_balancer', 'circuit_breaker', 'app_server'],
+  l4_maglev: ['load_balancer', 'circuit_breaker', 'app_server'],
+  load_balancer: ['circuit_breaker', 'app_server'],
+  circuit_breaker: ['load_balancer', 'app_server'],
+  app_server: ['database', 'redis_cache', 'message_queue', 'db_sharding', 'kafka_stream', 'distributed_nosql'],
+  redis_cache: ['database', 'db_sharding', 'distributed_nosql'],
+  message_queue: ['database', 'app_server', 'db_sharding'],
+  kafka_stream: ['database', 'app_server', 'db_sharding', 'distributed_nosql'],
+  db_sharding: ['database'],
   database: [],
+  distributed_nosql: [],
 };
 
 export function validateArchitectureGraph(graph: ArchitectureGraph): ValidationResult {
@@ -49,12 +55,12 @@ export function validateArchitectureGraph(graph: ArchitectureGraph): ValidationR
   }
 
   // Check database presence
-  const databases = graph.nodes.filter((n) => n.type === 'database');
+  const databases = graph.nodes.filter((n) => n.type === 'database' || n.type === 'distributed_nosql');
   if (databases.length === 0) {
     issues.push({
       type: 'error',
       code: 'NO_DATABASE',
-      message: 'No Database found. Application cannot persist or read state.',
+      message: 'No Database or Distributed Storage found. Application cannot persist or read state.',
     });
   }
 

@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@simulation/*": ["./packages/simulation/*"]
     }
   },
   "include": [

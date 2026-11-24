@@ -153,7 +153,16 @@ Modifying connections is intuitive and supports three methods:
 3. **Node Configuration Drawer:**  
    Click any node on the canvas to open the right-hand inspector. Under **"Connected Network Links"**, all inbound and outbound links are listed with source and target names and a dedicated red **`✕ Disconnect`** button.
 
-### Example: Inserting a Load Balancer
+### Safe Scaling & Architecture Maintenance Mode (Pause)
+
+To prevent your system from collapsing while you are in the middle of reconfiguring or scaling up (e.g., when links are temporarily severed to insert a Load Balancer or add Sharding):
+
+* **One-Click Canvas Pause Button:** A prominent floating button at the top-center of the canvas allows you to freeze traffic instantly (`[ ⏸ Pause to Scale Up ]`).
+* **Global Spacebar Shortcut (<kbd>Space</kbd>):** Tap <kbd>Space</kbd> anywhere in the game to toggle between live simulation and paused maintenance mode.
+* **Auto-Pause on Topology Edit (Enabled by Default):** Whenever you delete an edge, drop a new node, or remove a component, the simulation automatically pauses and enters **Safe Architecture Mode**, displaying an alert so you can wire your components without incurring accidental downtime or dropped requests.
+* **Resume Traffic:** Once your new topology is connected, hit <kbd>Space</kbd> or click the green **"▶ Resume Traffic"** button to resume traffic safely!
+
+### Example: Inserting a Load Balancer Safely
 1. Click the `✕` on the wire connecting `Client` $\to$ `App Server`.
 2. Drag a **Load Balancer** and a second **App Server** from the Toolbox onto the canvas.
 3. Draw wires:

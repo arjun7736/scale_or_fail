@@ -38,6 +38,11 @@ export interface ArchitectureState {
   getArchitectureGraph: () => ArchitectureGraph;
 }
 
+let onArchitectureEditCallback: (() => void) | null = null;
+export function registerArchitectureEditListener(cb: () => void) {
+  onArchitectureEditCallback = cb;
+}
+
 // Convert domain architecture graph into React Flow format
 function convertGraphToFlow(graph: ArchitectureGraph): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = graph.nodes.map((node) => ({
@@ -194,10 +199,12 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         selectedNodeId: id,
       }));
 
+      onArchitectureEditCallback?.();
       return archNode;
     },
 
     removeNode: (nodeId) => {
+      onArchitectureEditCallback?.();
       set((state) => ({
         nodes: state.nodes.filter((n) => n.id !== nodeId),
         edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
@@ -206,6 +213,7 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
     },
 
     removeEdge: (edgeId) => {
+      onArchitectureEditCallback?.();
       set((state) => ({
         edges: state.edges.filter((e) => e.id !== edgeId),
       }));

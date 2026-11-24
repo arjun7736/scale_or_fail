@@ -13,7 +13,7 @@ import {
   ServerIncidentDiagnosis,
 } from '../packages/simulation/failures/diagnosis';
 import { SimulationBridge } from '../lib/simulation-bridge';
-import { useArchitectureStore } from './architectureStore';
+import { useArchitectureStore, registerArchitectureEditListener } from './architectureStore';
 
 export interface TelemetryDataPoint {
   time: string;
@@ -41,6 +41,7 @@ export interface GameState {
   showMilestone: boolean;
   activeContextualHint: string | null;
   activeIncident: ServerIncidentDiagnosis | null;
+  autoPauseOnEdit: boolean;
 
   bridge: SimulationBridge | null;
 
@@ -48,6 +49,9 @@ export interface GameState {
   initGame: () => void;
   startGame: () => void;
   pauseGame: () => void;
+  togglePause: () => void;
+  setAutoPauseOnEdit: (enabled: boolean) => void;
+  notifyArchitectureEdit: () => void;
   setSpeed: (speed: number) => void;
   setDifficulty: (mode: DifficultyMode) => void;
   restartGame: () => void;
@@ -104,6 +108,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   showMilestone: false,
   activeContextualHint: 'Tip: Traffic will increase steadily. Monitor App Server CPU and Database Connections.',
   activeIncident: null,
+  autoPauseOnEdit: true,
   bridge: null,
 
   initGame: () => {
@@ -196,6 +201,37 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ gameStatus: 'paused' });
   },
 
+  togglePause: () => {
+    const { gameStatus, startGame, pauseGame } = get();
+    if (gameStatus === 'running') {
+      pauseGame();
+    } else {
+      startGame();
+    }
+  },
+
+  setAutoPauseOnEdit: (autoPauseOnEdit: boolean) => {
+    set({ autoPauseOnEdit });
+  },
+
+  notifyArchitectureEdit: () => {
+    const { gameStatus, autoPauseOnEdit, pauseGame, alerts } = get();
+    if (autoPauseOnEdit && gameStatus === 'running') {
+      pauseGame();
+      const simSec = get().systemMetrics.simTimeSeconds;
+      const timeStr = `${Math.floor(simSec / 60).toString().padStart(2, '0')}:${(simSec % 60).toString().padStart(2, '0')}`;
+      const autoPauseAlert = {
+        id: `auto-pause-${Date.now()}`,
+        tick: get().systemMetrics.tick,
+        timestamp: timeStr,
+        severity: 'info' as const,
+        title: 'Auto-Paused for Scaling',
+        message: 'Simulation paused for architecture maintenance so you can add components and rewire connections safely without downtime. Press Space or Click Resume when ready.',
+      };
+      set({ alerts: [autoPauseAlert, ...alerts] });
+    }
+  },
+
   setSpeed: (speed: number) => {
     get().bridge?.setSpeed(speed);
     set({ speed });
@@ -264,3 +300,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().bridge?.updateNodeConfig(nodeId, newConfig);
   },
 }));
+
+// Automatically pause for safe maintenance when topology is edited
+registerArchitectureEditListener(() => {
+  useGameStore.getState().notifyArchitectureEdit();
+});

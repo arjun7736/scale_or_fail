@@ -23,6 +23,8 @@ import {
   Search,
   LayoutList,
   Columns,
+  X,
+  Smartphone,
 } from 'lucide-react';
 import { ComponentType } from '@/packages/simulation/core/types';
 import { useArchitectureStore } from '@/stores/architectureStore';
@@ -245,6 +247,7 @@ const TOOLBOX_ITEMS: ToolboxItem[] = [
 export function Toolbox() {
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [lastAddedTitle, setLastAddedTitle] = useState<string | null>(null);
 
   const isToolboxOpen = useGameStore((s) => s.isToolboxOpen);
   const isToolboxRail = useGameStore((s) => s.isToolboxRail);
@@ -269,8 +272,13 @@ export function Toolbox() {
 
   const handleQuickAdd = (item: ToolboxItem) => {
     if (currentStage < item.unlockStage) return;
-    addNode(item.type);
+    // Calculate a slightly randomized center offset for mobile / click deploy
+    const offset = (Math.random() - 0.5) * 60;
+    addNode(item.type, { x: 260 + offset, y: 160 + offset });
     setTimeout(() => syncGraph(), 50);
+
+    setLastAddedTitle(item.title);
+    setTimeout(() => setLastAddedTitle(null), 2000);
   };
 
   const unlockedCount = TOOLBOX_ITEMS.filter((i) => currentStage >= i.unlockStage).length;
@@ -290,214 +298,237 @@ export function Toolbox() {
     return true;
   });
 
-  // COMPACT ICON RAIL MODE
-  if (isToolboxRail) {
-    return (
-      <div className="flex flex-col h-full bg-slate-900/95 border-r border-slate-800/80 w-14 select-none shrink-0 items-center py-2.5 space-y-2">
-        <button
-          onClick={toggleToolboxRail}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title="Expand to Full Card View"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-
-        <div className="w-8 h-px bg-slate-800" />
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden w-full flex flex-col items-center space-y-2 px-1">
-          {TOOLBOX_ITEMS.map((item) => {
-            const isLocked = currentStage < item.unlockStage;
-            return (
-              <button
-                key={item.id}
-                draggable={!isLocked}
-                onDragStart={(e) => handleDragStart(e, item)}
-                onClick={() => handleQuickAdd(item)}
-                className={`relative group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                  isLocked
-                    ? 'border-slate-800/60 bg-slate-950/40 text-slate-600 cursor-not-allowed'
-                    : `${item.iconBg} ${item.iconColor} hover:scale-105 hover:shadow-md cursor-grab active:cursor-grabbing`
-                }`}
-                title={`${item.title} (${item.costPerHour})${isLocked ? ` • Locked until Stage ${item.unlockStage}` : ' • Click or drag to canvas'}`}
-              >
-                {isLocked ? <Lock className="h-3.5 w-3.5" /> : item.icon}
-                {isLocked && (
-                  <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40 text-[8px] font-mono text-amber-300">
-                    {item.unlockStage}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="text-[9px] font-mono text-slate-500 text-center">
-          S{currentStage}
-        </div>
-      </div>
-    );
-  }
-
-  // SLEEK COMPACT DRAWER MODE (w-72)
   return (
-    <div className="flex flex-col h-full bg-slate-900/95 border-r border-slate-800/80 w-72 select-none shrink-0 transition-all">
-      {/* Header */}
-      <div className="p-2.5 border-b border-slate-800 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-              Toolbox
-            </h2>
-            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300">
-              S{currentStage}
-            </span>
+    <>
+      {/* Mobile Backdrop Overlay - closes on tap outside */}
+      <div
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 md:hidden animate-in fade-in"
+        onClick={toggleToolbox}
+      />
+
+      {/* COMPACT ICON RAIL MODE */}
+      {isToolboxRail ? (
+        <div className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-r border-slate-800/80 w-14 select-none shrink-0 items-center py-2.5 space-y-2 shadow-2xl md:shadow-none animate-in slide-in-from-left duration-200">
+          <button
+            onClick={toggleToolboxRail}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Expand to Full Card View"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          <div className="w-8 h-px bg-slate-800" />
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden w-full flex flex-col items-center space-y-2 px-1">
+            {TOOLBOX_ITEMS.map((item) => {
+              const isLocked = currentStage < item.unlockStage;
+              return (
+                <button
+                  key={item.id}
+                  draggable={!isLocked}
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onClick={() => handleQuickAdd(item)}
+                  className={`relative group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                    isLocked
+                      ? 'border-slate-800/60 bg-slate-950/40 text-slate-600 cursor-not-allowed'
+                      : `${item.iconBg} ${item.iconColor} hover:scale-105 active:scale-95 cursor-pointer`
+                  }`}
+                  title={`${item.title} (${item.costPerHour})${isLocked ? ` • Locked until Stage ${item.unlockStage}` : ' • Tap or drag to deploy'}`}
+                >
+                  {isLocked ? <Lock className="h-3.5 w-3.5" /> : item.icon}
+                  {isLocked && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40 text-[8px] font-mono text-amber-300">
+                      {item.unlockStage}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
-          <div className="flex items-center gap-1">
-            <button
-              onClick={toggleToolboxRail}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Collapse to Icon Rail"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={toggleToolbox}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Close Toolbox (Ctrl+B)"
-            >
-              <LayoutList className="h-3.5 w-3.5" />
-            </button>
+          <div className="text-[9px] font-mono text-slate-500 text-center">
+            S{currentStage}
           </div>
         </div>
-
-        {/* Quick Search */}
-        <div className="relative">
-          <Search className="h-3 w-3 absolute left-2 top-2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search components..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950/70 border border-slate-800 rounded-lg pl-7 pr-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/50"
-          />
-        </div>
-
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1 p-0.5 rounded-md bg-slate-950/70 border border-slate-800/80 text-[10px] font-medium font-mono">
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex-1 py-0.5 rounded text-center transition-all ${
-              filter === 'all'
-                ? 'bg-slate-800 text-white shadow-xs'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            All ({TOOLBOX_ITEMS.length})
-          </button>
-          <button
-            onClick={() => setFilter('unlocked')}
-            className={`flex-1 py-0.5 rounded text-center transition-all ${
-              filter === 'unlocked'
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Unlocked ({unlockedCount})
-          </button>
-          <button
-            onClick={() => setFilter('locked')}
-            className={`flex-1 py-0.5 rounded text-center transition-all ${
-              filter === 'locked'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Locked ({lockedCount})
-          </button>
-        </div>
-      </div>
-
-      {/* Component Cards List - Compact, sleek cards */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-        {filteredItems.map((item) => {
-          const isLocked = currentStage < item.unlockStage;
-          const isNewlyUnlocked = currentStage === item.unlockStage;
-
-          return (
-            <div
-              key={item.id}
-              draggable={!isLocked}
-              onDragStart={(e) => handleDragStart(e, item)}
-              className={`group relative rounded-lg border p-2 transition-all ${
-                isLocked
-                  ? 'border-slate-800/40 bg-slate-950/20 opacity-60 hover:opacity-75 cursor-not-allowed'
-                  : 'border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/30 cursor-grab active:cursor-grabbing shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
-                      isLocked ? 'border-slate-800 bg-slate-900 text-slate-500' : `${item.iconBg} ${item.iconColor}`
-                    }`}
-                  >
-                    {isLocked ? <Lock className="h-3 w-3" /> : item.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span
-                        className={`text-[11px] font-semibold truncate ${
-                          isLocked ? 'text-slate-400' : 'text-slate-200 group-hover:text-white'
-                        }`}
-                      >
-                        {item.title}
-                      </span>
-                      {isNewlyUnlocked && (
-                        <span className="text-[8px] font-mono px-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                          NEW
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[9px] text-slate-500 font-mono truncate">
-                      {item.costPerHour} • {item.category}
-                    </div>
-                  </div>
-                </div>
-
-                {!isLocked ? (
-                  <button
-                    onClick={() => handleQuickAdd(item)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-800 hover:bg-teal-500/20 hover:text-teal-400 text-slate-300"
-                    title="Add to canvas"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                ) : (
-                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-400/90 shrink-0">
-                    Stage {item.unlockStage}
-                  </span>
-                )}
+      ) : (
+        /* FULL COMPACT DRAWER MODE (Fixed overlay on mobile, inline on desktop) */
+        <div className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-r border-slate-800/80 w-72 max-w-[85vw] select-none shrink-0 shadow-2xl md:shadow-none animate-in slide-in-from-left duration-200">
+          {/* Header */}
+          <div className="p-2.5 border-b border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                  Toolbox
+                </h2>
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300">
+                  S{currentStage}
+                </span>
               </div>
 
-              <p className="mt-1 text-[10px] text-slate-400 line-clamp-1 group-hover:line-clamp-none transition-all">
-                {item.description}
-              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleToolboxRail}
+                  className="hidden md:inline-flex p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  title="Collapse to Icon Rail"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={toggleToolbox}
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  title="Close Toolbox"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Footer tip */}
-      <div className="p-2 border-t border-slate-800 bg-slate-950/40 text-[10px] text-slate-400 font-mono flex items-center justify-between">
-        <span className="text-slate-500">Stage {currentStage}: {currentStageName}</span>
-        <button
-          onClick={toggleToolboxRail}
-          className="text-teal-400 hover:underline text-[10px]"
-        >
-          Rail view
-        </button>
-      </div>
-    </div>
+            {/* Tap-to-Deploy Alert Banner on Mobile */}
+            <div className="md:hidden flex items-center justify-between px-2 py-1 rounded bg-teal-500/10 border border-teal-500/20 text-[10px] text-teal-300 font-mono">
+              <span>👉 Tap any card to deploy to canvas</span>
+              <span className="text-slate-400 text-[9px]">Tap X to exit</span>
+            </div>
+
+            {/* Feedback alert when component is deployed */}
+            {lastAddedTitle && (
+              <div className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono animate-in fade-in">
+                ✓ Deployed {lastAddedTitle} to canvas!
+              </div>
+            )}
+
+            {/* Quick Search */}
+            <div className="relative">
+              <Search className="h-3 w-3 absolute left-2 top-2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search components..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-950/70 border border-slate-800 rounded-lg pl-7 pr-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/50"
+              />
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1 p-0.5 rounded-md bg-slate-950/70 border border-slate-800/80 text-[10px] font-medium font-mono">
+              <button
+                onClick={() => setFilter('all')}
+                className={`flex-1 py-0.5 rounded text-center transition-all ${
+                  filter === 'all'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All ({TOOLBOX_ITEMS.length})
+              </button>
+              <button
+                onClick={() => setFilter('unlocked')}
+                className={`flex-1 py-0.5 rounded text-center transition-all ${
+                  filter === 'unlocked'
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Unlocked ({unlockedCount})
+              </button>
+              <button
+                onClick={() => setFilter('locked')}
+                className={`flex-1 py-0.5 rounded text-center transition-all ${
+                  filter === 'locked'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Locked ({lockedCount})
+              </button>
+            </div>
+          </div>
+
+          {/* Component Cards List - Tap or Drag to Add */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {filteredItems.map((item) => {
+              const isLocked = currentStage < item.unlockStage;
+              const isNewlyUnlocked = currentStage === item.unlockStage;
+
+              return (
+                <div
+                  key={item.id}
+                  draggable={!isLocked}
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onClick={() => handleQuickAdd(item)}
+                  className={`group relative rounded-lg border p-2 transition-all select-none ${
+                    isLocked
+                      ? 'border-slate-800/40 bg-slate-950/20 opacity-60 hover:opacity-75 cursor-not-allowed'
+                      : 'border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/30 active:scale-[0.98] cursor-pointer shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
+                          isLocked ? 'border-slate-800 bg-slate-900 text-slate-500' : `${item.iconBg} ${item.iconColor}`
+                        }`}
+                      >
+                        {isLocked ? <Lock className="h-3 w-3" /> : item.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span
+                            className={`text-[11px] font-semibold truncate ${
+                              isLocked ? 'text-slate-400' : 'text-slate-200 group-hover:text-white'
+                            }`}
+                          >
+                            {item.title}
+                          </span>
+                          {isNewlyUnlocked && (
+                            <span className="text-[8px] font-mono px-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[9px] text-slate-500 font-mono truncate">
+                          {item.costPerHour} • {item.category}
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isLocked ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickAdd(item);
+                        }}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-800 hover:bg-teal-500/20 hover:text-teal-400 text-slate-300"
+                        title="Deploy to canvas"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-400/90 shrink-0">
+                        Stage {item.unlockStage}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-[10px] text-slate-400 line-clamp-1 group-hover:line-clamp-none transition-all">
+                    {item.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="p-2 border-t border-slate-800 bg-slate-950/40 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+            <span className="text-slate-500 truncate">Stage {currentStage}: {currentStageName}</span>
+            <button
+              onClick={toggleToolbox}
+              className="text-teal-400 hover:underline text-[10px] md:hidden"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

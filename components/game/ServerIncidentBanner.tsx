@@ -29,7 +29,7 @@ export function ServerIncidentBanner() {
 
   return (
     <div
-      className={`absolute top-3 left-4 right-4 z-40 mx-auto max-w-4xl rounded-xl border p-4 shadow-2xl backdrop-blur-xl transition-all duration-300 animate-in slide-in-from-top-4 ${
+      className={`absolute top-2 left-2 right-2 sm:top-3 sm:left-4 sm:right-4 z-40 mx-auto max-w-4xl max-h-[85vh] overflow-y-auto rounded-xl p-3 sm:p-4 shadow-2xl backdrop-blur-xl transition-all duration-300 animate-in slide-in-from-top-4 ${
         isCritical
           ? 'border-rose-500/70 bg-slate-950/95 shadow-rose-950/40'
           : 'border-amber-500/70 bg-slate-950/95 shadow-amber-950/30'

@@ -34,7 +34,14 @@ export function TelemetrySidebar() {
   const isCritical = systemMetrics.systemHealth === 'critical' || systemMetrics.systemHealth === 'crashed';
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/95 border-l border-slate-800/80 w-72 select-none shrink-0 transition-all">
+    <>
+      {/* Mobile Backdrop Overlay - closes on tap outside */}
+      <div
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 md:hidden animate-in fade-in"
+        onClick={toggleTelemetry}
+      />
+
+      <div className="fixed inset-y-0 right-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-l border-slate-800/80 w-72 max-w-[85vw] select-none shrink-0 shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="p-2.5 border-b border-slate-800 flex items-center justify-between">
         <div>
@@ -223,5 +230,6 @@ export function TelemetrySidebar() {
         </div>
       </div>
     </div>
+    </>
   );
 }

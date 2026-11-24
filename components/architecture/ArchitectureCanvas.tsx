@@ -97,50 +97,50 @@ function CanvasInternal() {
     >
       {/* Floating Architecture Scaling / Maintenance HUD - Docked top-right to prevent banner collision */}
       {gameStatus === 'paused' && (
-        <div className="absolute top-3 right-4 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-amber-500/40 bg-slate-950/90 shadow-xl shadow-amber-950/30 backdrop-blur-md animate-in fade-in slide-in-from-top-1">
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-4 z-20 flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-amber-500/40 bg-slate-950/90 shadow-xl shadow-amber-950/30 backdrop-blur-md animate-in fade-in slide-in-from-top-1">
           <div className="flex items-center gap-1.5">
             <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[11px] font-mono font-bold text-amber-300">
-              MAINTENANCE (PAUSED)
+            <span className="text-[10px] sm:text-[11px] font-mono font-bold text-amber-300">
+              PAUSED
             </span>
           </div>
           <button
             onClick={startGame}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold font-mono text-[11px] transition-all shadow-sm"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold font-mono text-[10px] sm:text-[11px] transition-all shadow-sm"
           >
-            <Play className="h-2.5 w-2.5 fill-current" /> Resume <kbd className="text-[9px] bg-teal-700/40 text-slate-950 px-1 rounded ml-0.5">Space</kbd>
+            <Play className="h-2.5 w-2.5 fill-current" /> Resume <kbd className="hidden sm:inline-block text-[9px] bg-teal-700/40 text-slate-950 px-1 rounded ml-0.5">Space</kbd>
           </button>
         </div>
       )}
 
       {gameStatus === 'running' && (
-        <div className="absolute top-3 right-4 z-20 flex items-center gap-2 px-2.5 py-1 rounded-xl border border-slate-800/80 bg-slate-950/80 shadow-md backdrop-blur-md">
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-4 z-20 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 rounded-xl border border-slate-800/80 bg-slate-950/80 shadow-md backdrop-blur-md">
           <span className="flex h-1.5 w-1.5 rounded-full bg-teal-400 animate-ping" />
-          <span className="text-[10px] font-mono text-slate-300">Live Traffic</span>
+          <span className="text-[9px] sm:text-[10px] font-mono text-slate-300">Live</span>
           <button
             onClick={pauseGame}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-amber-300 font-semibold font-mono text-[10px] transition-all border border-amber-500/30"
+            className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-amber-300 font-semibold font-mono text-[9px] sm:text-[10px] transition-all border border-amber-500/30"
             title="Pause to rewire and scale safely"
           >
-            <Pause className="h-2.5 w-2.5 fill-current" /> Pause <kbd className="text-[8px] bg-slate-950 px-1 rounded text-slate-400">Space</kbd>
+            <Pause className="h-2.5 w-2.5 fill-current" /> Pause <kbd className="hidden sm:inline-block text-[8px] bg-slate-950 px-1 rounded text-slate-400">Space</kbd>
           </button>
         </div>
       )}
 
       {gameStatus === 'idle' && (
-        <div className="absolute top-3 right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-teal-500/30 bg-slate-950/90 shadow-md backdrop-blur-md">
-          <span className="text-[11px] font-mono text-slate-300">Topology Ready</span>
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-4 z-20 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-teal-500/30 bg-slate-950/90 shadow-md backdrop-blur-md">
+          <span className="text-[10px] sm:text-[11px] font-mono text-slate-300">Ready</span>
           <button
             onClick={startGame}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold font-mono text-[11px] transition-all shadow-sm"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold font-mono text-[10px] sm:text-[11px] transition-all shadow-sm"
           >
-            <Play className="h-2.5 w-2.5 fill-current" /> Start <kbd className="text-[9px] bg-teal-600/50 text-slate-950 px-1 rounded ml-0.5">Space</kbd>
+            <Play className="h-2.5 w-2.5 fill-current" /> Start <kbd className="hidden sm:inline-block text-[9px] bg-teal-600/50 text-slate-950 px-1 rounded ml-0.5">Space</kbd>
           </button>
         </div>
       )}
 
       {/* Auto-Pause Toggle in bottom-right corner of Canvas */}
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono shadow-md backdrop-blur-md">
+      <div className="hidden sm:flex absolute bottom-4 right-4 z-20 items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono shadow-md backdrop-blur-md">
         <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400 hover:text-slate-200">
           <input
             type="checkbox"
@@ -176,6 +176,9 @@ function CanvasInternal() {
         maxZoom={1.8}
         deleteKeyCode={['Backspace', 'Delete']}
         edgesFocusable={true}
+        panOnDrag={true}
+        zoomOnPinch={true}
+        preventScrolling={false}
         proOptions={{ hideAttribution: true }}
       >
         <Background

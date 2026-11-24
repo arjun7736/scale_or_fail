@@ -129,6 +129,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   initGame: () => {
     if (get().bridge) return;
 
+    // Detect mobile viewport on load to start with full canvas view
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      set({
+        isToolboxOpen: false,
+        isTelemetryOpen: false,
+        bottomPanelMode: 'minimized',
+      });
+    }
+
     const graph = useArchitectureStore.getState().getArchitectureGraph();
     const bridge = new SimulationBridge(graph, 1337, get().difficulty);
 

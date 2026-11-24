@@ -76,9 +76,19 @@ export function NodeConfigDrawer() {
   };
 
   return (
-    <div className="absolute right-3 top-3 bottom-3 w-80 bg-slate-900/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl z-20 flex flex-col animate-in slide-in-from-right-4 duration-200 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-slate-800 bg-slate-950/40">
+    <>
+      {/* Mobile Backdrop Overlay - closes on tap outside */}
+      <div
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-30 md:hidden animate-in fade-in"
+        onClick={() => selectNode(null)}
+      />
+
+      <div className="fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl md:inset-x-auto md:bottom-3 md:top-3 md:right-3 md:w-80 md:max-h-none md:rounded-2xl md:absolute bg-slate-900/98 md:bg-slate-900/95 border-t md:border border-slate-700 md:border-slate-800 shadow-2xl backdrop-blur-xl z-40 md:z-20 flex flex-col animate-in slide-in-from-bottom md:slide-in-from-right-4 duration-200 overflow-hidden">
+        {/* Mobile Pull Handle */}
+        <div className="w-10 h-1 bg-slate-700 rounded-full mx-auto mt-2.5 md:hidden shrink-0" />
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-slate-800 bg-slate-950/40">
         <div>
           <div className="text-xs uppercase tracking-wider text-slate-400 font-mono">
             Node Configuration
@@ -602,5 +612,6 @@ export function NodeConfigDrawer() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -9,4 +9,5 @@ export * from './traffic/request-mix';
 export * from './routing/graph-validator';
 export * from './routing/traffic-router';
 export * from './failures/detector';
+export * from './failures/diagnosis';
 export * from './scenarios/starter';

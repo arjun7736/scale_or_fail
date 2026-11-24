@@ -52,6 +52,7 @@ export interface DatabaseNodeConfig extends BaseNodeConfig {
   readLatencyMs: number;
   writeLatencyMs: number;
   queryOptimizationIndex: boolean;
+  connectionPooling?: boolean;
 }
 
 export interface RedisCacheNodeConfig extends BaseNodeConfig {
@@ -127,6 +128,8 @@ export interface ComponentLiveMetrics {
   costPerHour: number;
   statusMessage?: string;
   isOom?: boolean;
+  cacheHitRps?: number;
+  cacheMissRps?: number;
 }
 
 export interface SystemMetrics {
@@ -193,9 +196,19 @@ export interface PostmortemReport {
   }[];
 }
 
+export interface EdgeLiveMetrics {
+  edgeId: string;
+  source: string;
+  target: string;
+  throughputRps: number;
+  avgLatencyMs: number;
+  status: 'healthy' | 'warning' | 'critical';
+}
+
 export interface SimulationTickOutput {
   systemMetrics: SystemMetrics;
   componentMetrics: Record<string, ComponentLiveMetrics>;
+  edgeMetrics?: Record<string, EdgeLiveMetrics>;
   newAlerts: SystemAlert[];
   isGameOver: boolean;
   postmortem?: PostmortemReport;

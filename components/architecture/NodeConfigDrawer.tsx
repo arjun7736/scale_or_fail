@@ -235,6 +235,22 @@ export function NodeConfigDrawer() {
                 Adds B-Tree compound indices to hot query paths. Doubles read throughput capacity and reduces read query latency by 55%.
               </p>
             </div>
+
+            {/* Connection Pooling (PgBouncer) Toggle */}
+            <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-200">Connection Pooler (PgBouncer)</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean((config as DatabaseNodeConfig).connectionPooling)}
+                  onChange={(e) => handleUpdate({ connectionPooling: e.target.checked })}
+                  className="rounded border-slate-700 bg-slate-900 text-purple-500 focus:ring-purple-500 h-4 w-4"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                Multiplexes hundreds of upstream application worker threads onto a lean pool of database backend connections. Drastically prevents connection pool exhaustion when scaling servers.
+              </p>
+            </div>
           </div>
         )}
 

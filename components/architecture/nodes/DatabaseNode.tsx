@@ -59,7 +59,8 @@ export function DatabaseNode({ id, data }: NodeProps) {
             </div>
             <div className="text-[10px] text-purple-400 font-mono flex items-center gap-1">
               <span className="uppercase">{config?.tier || 'small'}</span> • {isPrimary ? 'PRIMARY' : 'REPLICA'}
-              {config?.queryOptimizationIndex ? <Zap className="h-2.5 w-2.5 text-amber-300 inline" /> : null}
+              {config?.queryOptimizationIndex ? <span title="Index Optimized"><Zap className="h-2.5 w-2.5 text-amber-300 inline" /></span> : null}
+              {config?.connectionPooling ? <span className="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold" title="PgBouncer Pooler Active">POOL</span> : null}
             </div>
           </div>
         </div>

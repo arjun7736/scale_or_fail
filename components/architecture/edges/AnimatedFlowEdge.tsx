@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BaseEdge, EdgeProps, getBezierPath } from '@xyflow/react';
+import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 import { useGameStore } from '@/stores/gameStore';
 
 export function AnimatedFlowEdge({
@@ -17,7 +17,7 @@ export function AnimatedFlowEdge({
   source,
   target,
 }: EdgeProps) {
-  const [edgePath] = getBezierPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -27,16 +27,27 @@ export function AnimatedFlowEdge({
   });
 
   const sourceMetrics = useGameStore((s) => s.componentMetrics[source]);
-  const isHealthy = !sourceMetrics || sourceMetrics.health === 'healthy';
-  const isWarning = sourceMetrics?.health === 'warning';
-  const isCritical = sourceMetrics?.health === 'critical' || sourceMetrics?.health === 'failed';
+  const targetMetrics = useGameStore((s) => s.componentMetrics[target]);
+  const edgeMetric = useGameStore((s) => s.edgeMetrics[id]);
+
+  const throughput = edgeMetric?.throughputRps ?? 0;
+  const isHealthy = (!sourceMetrics || sourceMetrics.health === 'healthy') && (!targetMetrics || targetMetrics.health === 'healthy');
+  const isWarning = sourceMetrics?.health === 'warning' || targetMetrics?.health === 'warning';
+  const isCritical = sourceMetrics?.health === 'critical' || sourceMetrics?.health === 'failed' || targetMetrics?.health === 'critical';
 
   let strokeColor = '#0ea5e9'; // Cyan/teal for healthy
+  let badgeBorder = 'border-sky-500/30 bg-slate-950/90 text-sky-300';
+
   if (isCritical) {
     strokeColor = '#f43f5e'; // Rose/red
+    badgeBorder = 'border-rose-500/50 bg-rose-950/90 text-rose-300 animate-pulse';
   } else if (isWarning) {
     strokeColor = '#f59e0b'; // Amber
+    badgeBorder = 'border-amber-500/50 bg-amber-950/90 text-amber-300';
   }
+
+  // Adaptive stroke width: thicker for higher traffic
+  const strokeWidth = throughput > 10000 ? 4.5 : throughput > 1000 ? 3.5 : 2.5;
 
   return (
     <>
@@ -45,12 +56,27 @@ export function AnimatedFlowEdge({
         markerEnd={markerEnd}
         style={{
           ...style,
-          strokeWidth: 3,
+          strokeWidth,
           stroke: strokeColor,
-          opacity: 0.8,
+          opacity: throughput > 0 ? 0.9 : 0.35,
         }}
-        className="animate-flow-dash"
+        className={throughput > 0 ? 'animate-flow-dash' : ''}
       />
+
+      {throughput > 0 && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+            }}
+            className={`nodrag nopan px-2 py-0.5 rounded-full border shadow-lg font-mono text-[9px] font-semibold transition-all select-none ${badgeBorder}`}
+          >
+            {throughput.toLocaleString()} req/s
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
 }

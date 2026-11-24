@@ -8,6 +8,7 @@ import { NodeConfigDrawer } from '@/components/architecture/NodeConfigDrawer';
 import { TelemetrySidebar } from '@/components/monitoring/TelemetrySidebar';
 import { BottomPanel } from '@/components/monitoring/BottomPanel';
 import { GameModal } from '@/components/game/GameModal';
+import { ServerIncidentBanner } from '@/components/game/ServerIncidentBanner';
 import { useGameStore } from '@/stores/gameStore';
 
 export default function Home() {
@@ -29,6 +30,7 @@ export default function Home() {
 
         {/* Center: Interactive Canvas */}
         <div className="flex-1 relative h-full w-full overflow-hidden">
+          <ServerIncidentBanner />
           <ArchitectureCanvas />
           <NodeConfigDrawer />
         </div>

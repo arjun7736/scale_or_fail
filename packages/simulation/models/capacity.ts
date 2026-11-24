@@ -104,9 +104,15 @@ export function calculateDatabaseCapacity(
   const readCapacityRps = (config.maxIops * 0.75) / Math.max(0.1, readIopsPerReq);
   const writeCapacityRps = (config.maxIops * 0.40) / Math.max(0.1, writeIopsPerReq);
 
-  // Database connections: active connections scale with upstream threads querying the DB
+  // Database connections: active connections scale with upstream threads querying the DB.
+  // With Connection Pooling (PgBouncer), worker threads share multiplexed pooled backend connections:
+  const threadRatio = config.connectionPooling
+    ? 0.08
+    : (config.role === 'primary' ? 0.35 : 0.25);
+  const throughputRatio = config.connectionPooling ? 0.01 : 0.04;
+
   const estimatedConnectionsDemanded = Math.ceil(
-    upstreamActiveThreads * (config.role === 'primary' ? 0.35 : 0.25) + (readRps + writeRps) * 0.04
+    upstreamActiveThreads * threadRatio + (readRps + writeRps) * throughputRatio
   );
 
   const connectionsActive = Math.min(config.maxConnections, estimatedConnectionsDemanded);

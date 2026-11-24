@@ -106,6 +106,11 @@ export class FailureDetector {
     } else if (primaryDbMetrics && (primaryDbMetrics.connectionsActive >= primaryDbMetrics.connectionsMax || primaryDbMetrics.health === 'critical')) {
       rootCause = `Database Connection Exhaustion: The primary database connection pool was saturated (${primaryDbMetrics.connectionsActive}/${primaryDbMetrics.connectionsMax} connections). In-flight application server threads blocked waiting for connections, triggering cascading 504 Gateway Timeouts across the entire tier.`;
       recommendations.push({
+        title: 'Enable Database Connection Pooling (PgBouncer)',
+        explanation: 'Multiplexing worker threads onto a pooled backend connection pool eliminates the 1-thread-to-1-connection bottleneck.',
+        architecturalFix: 'Select your Database node and toggle "Connection Pooler (PgBouncer)" in the configuration drawer.',
+      });
+      recommendations.push({
         title: 'Introduce Redis Caching Layer',
         explanation: 'Redis absorbs 80-90% of read queries in memory with sub-millisecond latency, preventing them from consuming expensive database connection slots.',
         architecturalFix: 'Drag a Redis Cache node onto the canvas and connect it between your App Server and Database.',

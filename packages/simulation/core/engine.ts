@@ -60,7 +60,12 @@ export class SimulationEngine {
     const decomposed = decomposeTraffic(trafficInfo.incomingRps);
 
     // 2. Route traffic through architecture graph
-    const routeResult = routeTrafficThroughGraph(this.graph, decomposed, this.simSeconds);
+    const routeResult = routeTrafficThroughGraph(
+      this.graph,
+      decomposed,
+      this.simSeconds,
+      this.lastTickOutput?.componentMetrics
+    );
 
     // 3. Financial calculations
     let totalCostPerHour = 0;
@@ -158,6 +163,7 @@ export class SimulationEngine {
     const output: SimulationTickOutput = {
       systemMetrics,
       componentMetrics: routeResult.componentMetrics,
+      edgeMetrics: routeResult.edgeMetrics,
       newAlerts,
       isGameOver: this.isGameOver,
       postmortem,

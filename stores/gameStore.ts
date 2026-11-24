@@ -2,12 +2,16 @@ import { create } from 'zustand';
 import {
   ComponentLiveMetrics,
   DifficultyMode,
+  EdgeLiveMetrics,
   PostmortemReport,
   SimulationTickOutput,
   SystemAlert,
   SystemMetrics,
 } from '../packages/simulation/core/types';
-import { STARTER_ARCHITECTURE } from '../packages/simulation/scenarios/starter';
+import {
+  diagnoseServerIncident,
+  ServerIncidentDiagnosis,
+} from '../packages/simulation/failures/diagnosis';
 import { SimulationBridge } from '../lib/simulation-bridge';
 import { useArchitectureStore } from './architectureStore';
 
@@ -29,12 +33,14 @@ export interface GameState {
   difficulty: DifficultyMode;
   systemMetrics: SystemMetrics;
   componentMetrics: Record<string, ComponentLiveMetrics>;
+  edgeMetrics: Record<string, EdgeLiveMetrics>;
   metricsHistory: TelemetryDataPoint[];
   alerts: SystemAlert[];
   postmortem: PostmortemReport | null;
   showPostmortem: boolean;
   showMilestone: boolean;
   activeContextualHint: string | null;
+  activeIncident: ServerIncidentDiagnosis | null;
 
   bridge: SimulationBridge | null;
 
@@ -47,6 +53,8 @@ export interface GameState {
   restartGame: () => void;
   dismissPostmortem: () => void;
   dismissMilestone: () => void;
+  dismissIncident: () => void;
+  inspectIncidentNode: () => void;
   syncGraph: () => void;
   updateNodeConfigInGame: (nodeId: string, newConfig: any) => void;
 }
@@ -79,6 +87,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   difficulty: 'beginner',
   systemMetrics: INITIAL_SYSTEM_METRICS,
   componentMetrics: {},
+  edgeMetrics: {},
   metricsHistory: [],
   alerts: [
     {
@@ -94,6 +103,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   showPostmortem: false,
   showMilestone: false,
   activeContextualHint: 'Tip: Traffic will increase steadily. Monitor App Server CPU and Database Connections.',
+  activeIncident: null,
   bridge: null,
 
   initGame: () => {
@@ -142,9 +152,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
 
+        const currentGraph = useArchitectureStore.getState().getArchitectureGraph();
+        const incident = diagnoseServerIncident(currentGraph, output.componentMetrics, output.systemMetrics);
+
         set((state) => ({
           systemMetrics: output.systemMetrics,
           componentMetrics: output.componentMetrics,
+          edgeMetrics: output.edgeMetrics || state.edgeMetrics,
+          activeIncident: incident,
           metricsHistory: [...state.metricsHistory.slice(-59), newPoint],
           alerts: output.newAlerts.length > 0 ? [...output.newAlerts, ...state.alerts].slice(0, 50) : state.alerts,
           activeContextualHint: contextualHint || state.activeContextualHint,
@@ -215,6 +230,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       showPostmortem: false,
       showMilestone: false,
       activeContextualHint: 'Tip: Traffic will increase steadily. Monitor App Server CPU and Database Connections.',
+      activeIncident: null,
     });
   },
 
@@ -224,6 +240,17 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   dismissMilestone: () => {
     set({ showMilestone: false });
+  },
+
+  dismissIncident: () => {
+    set({ activeIncident: null });
+  },
+
+  inspectIncidentNode: () => {
+    const incident = get().activeIncident;
+    if (incident?.crashedNodeId) {
+      useArchitectureStore.getState().selectNode(incident.crashedNodeId);
+    }
   },
 
   syncGraph: () => {

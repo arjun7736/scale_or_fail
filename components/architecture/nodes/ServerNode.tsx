@@ -118,6 +118,16 @@ export function ServerNode({ id, data }: NodeProps) {
             <span>+{metrics.queueDepth} reqs</span>
           </div>
         ) : null}
+
+        {health === 'failed' || metrics?.isOom ? (
+          <div className="mt-1 rounded bg-rose-500/20 border border-rose-500/40 p-1 text-center font-mono text-[9px] font-bold text-rose-300 animate-pulse">
+            💥 SERVER CRASHED - CLICK TO FIX
+          </div>
+        ) : cpu >= 95 ? (
+          <div className="mt-1 rounded bg-rose-500/20 border border-rose-500/40 p-1 text-center font-mono text-[9px] font-bold text-rose-300">
+            ⚠️ 100% CPU SATURATED
+          </div>
+        ) : null}
       </div>
 
       {/* Source handle on Right */}

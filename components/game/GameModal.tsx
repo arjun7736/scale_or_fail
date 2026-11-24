@@ -108,11 +108,11 @@ export function GameModal() {
           </div>
 
           {/* Root cause callout */}
-          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 space-y-1.5">
+          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wider text-rose-400 font-mono flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" /> Root Cause
+              <AlertTriangle className="h-4 w-4" /> Exact Issue That Broke The Server
             </div>
-            <p className="text-xs text-slate-200 leading-relaxed font-mono">
+            <p className="text-xs text-slate-100 leading-relaxed font-mono bg-slate-950/70 p-3 rounded-lg border border-rose-500/20">
               {postmortem.rootCause}
             </p>
           </div>
@@ -156,8 +156,8 @@ export function GameModal() {
 
           {/* Educational Recommendations */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
-              <BookOpen className="h-4 w-4 text-teal-400" /> Architectural Lessons Learned
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-teal-300 font-mono">
+              <BookOpen className="h-4 w-4 text-teal-400" /> What To Do To Not Break The System In This Situation
             </div>
 
             <div className="space-y-2">

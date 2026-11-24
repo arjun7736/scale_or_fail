@@ -127,6 +127,7 @@ export const DEFAULT_CONFIGS = {
     name: role === 'primary' ? `Primary DB (${tier})` : `Read Replica (${tier})`,
     role,
     queryOptimizationIndex: false,
+    connectionPooling: false,
     ...DATABASE_TIERS[tier],
     costPerHour: role === 'replica' ? DATABASE_TIERS[tier].costPerHour * 0.85 : DATABASE_TIERS[tier].costPerHour,
   }),

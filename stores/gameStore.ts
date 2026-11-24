@@ -43,6 +43,12 @@ export interface GameState {
   activeIncident: ServerIncidentDiagnosis | null;
   autoPauseOnEdit: boolean;
 
+  // Layout & UI Density Controls
+  isToolboxOpen: boolean;
+  isToolboxRail: boolean;
+  isTelemetryOpen: boolean;
+  bottomPanelMode: 'minimized' | 'compact' | 'expanded';
+
   bridge: SimulationBridge | null;
 
   // Actions
@@ -51,6 +57,11 @@ export interface GameState {
   pauseGame: () => void;
   togglePause: () => void;
   setAutoPauseOnEdit: (enabled: boolean) => void;
+  toggleToolbox: () => void;
+  toggleToolboxRail: () => void;
+  toggleTelemetry: () => void;
+  setBottomPanelMode: (mode: 'minimized' | 'compact' | 'expanded') => void;
+  toggleBottomPanel: () => void;
   notifyArchitectureEdit: () => void;
   setSpeed: (speed: number) => void;
   setDifficulty: (mode: DifficultyMode) => void;
@@ -109,6 +120,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   activeContextualHint: 'Tip: Traffic will increase steadily. Monitor App Server CPU and Database Connections.',
   activeIncident: null,
   autoPauseOnEdit: true,
+  isToolboxOpen: true,
+  isToolboxRail: false,
+  isTelemetryOpen: true,
+  bottomPanelMode: 'compact',
   bridge: null,
 
   initGame: () => {
@@ -212,6 +227,28 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setAutoPauseOnEdit: (autoPauseOnEdit: boolean) => {
     set({ autoPauseOnEdit });
+  },
+
+  toggleToolbox: () => {
+    set((s) => ({ isToolboxOpen: !s.isToolboxOpen }));
+  },
+
+  toggleToolboxRail: () => {
+    set((s) => ({ isToolboxRail: !s.isToolboxRail }));
+  },
+
+  toggleTelemetry: () => {
+    set((s) => ({ isTelemetryOpen: !s.isTelemetryOpen }));
+  },
+
+  setBottomPanelMode: (bottomPanelMode: 'minimized' | 'compact' | 'expanded') => {
+    set({ bottomPanelMode });
+  },
+
+  toggleBottomPanel: () => {
+    set((s) => ({
+      bottomPanelMode: s.bottomPanelMode === 'minimized' ? 'compact' : 'minimized',
+    }));
   },
 
   notifyArchitectureEdit: () => {

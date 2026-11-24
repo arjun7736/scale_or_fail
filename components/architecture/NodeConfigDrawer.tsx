@@ -76,9 +76,9 @@ export function NodeConfigDrawer() {
   };
 
   return (
-    <div className="absolute right-0 top-0 bottom-0 w-80 bg-slate-900/95 border-l border-slate-800 shadow-2xl backdrop-blur-xl z-20 flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="absolute right-3 top-3 bottom-3 w-80 bg-slate-900/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl z-20 flex flex-col animate-in slide-in-from-right-4 duration-200 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-800">
+      <div className="flex items-center justify-between p-3 border-b border-slate-800 bg-slate-950/40">
         <div>
           <div className="text-xs uppercase tracking-wider text-slate-400 font-mono">
             Node Configuration

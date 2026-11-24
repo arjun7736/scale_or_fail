@@ -106,6 +106,14 @@ export class SimulationBridge {
     }
   }
 
+  setDifficulty(difficulty: DifficultyMode) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'SET_DIFFICULTY', payload: difficulty });
+    } else if (this.localEngine) {
+      this.localEngine.setDifficulty(difficulty);
+    }
+  }
+
   updateGraph(graph: ArchitectureGraph) {
     if (this.worker) {
       this.worker.postMessage({ type: 'UPDATE_GRAPH', payload: { graph } });

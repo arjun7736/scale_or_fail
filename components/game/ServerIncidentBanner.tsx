@@ -19,6 +19,7 @@ export function ServerIncidentBanner() {
   const activeIncident = useGameStore((s) => s.activeIncident);
   const dismissIncident = useGameStore((s) => s.dismissIncident);
   const inspectIncidentNode = useGameStore((s) => s.inspectIncidentNode);
+  const difficulty = useGameStore((s) => s.difficulty);
 
   if (!activeIncident || !activeIncident.hasIncident) {
     return null;
@@ -89,19 +90,35 @@ export function ServerIncidentBanner() {
       <div className="mt-3 pt-3 border-t border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="space-y-1 flex-1">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-teal-400 font-mono flex items-center gap-1.5">
-            <Wrench className="h-3.5 w-3.5" /> What to do to prevent breaking the system:
+            <Wrench className="h-3.5 w-3.5" />
+            {difficulty === 'beginner'
+              ? 'What to do to prevent breaking the system:'
+              : difficulty === 'intermediate'
+              ? 'System Diagnostics:'
+              : 'Production Incident Protocol:'}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 font-mono text-[11px]">
-            {activeIncident.actionableSteps.map((step, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded border border-slate-800/60 text-slate-200"
-              >
-                <ArrowRight className="h-3 w-3 text-teal-400 shrink-0" />
-                <span className="truncate">{step}</span>
-              </div>
-            ))}
-          </div>
+
+          {difficulty === 'beginner' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 font-mono text-[11px]">
+              {activeIncident.actionableSteps.map((step, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded border border-slate-800/60 text-slate-200"
+                >
+                  <ArrowRight className="h-3 w-3 text-teal-400 shrink-0" />
+                  <span className="truncate">{step}</span>
+                </div>
+              ))}
+            </div>
+          ) : difficulty === 'intermediate' ? (
+            <div className="font-mono text-[11px] text-amber-300/90 bg-amber-500/10 p-2 rounded border border-amber-500/20">
+              ⚡ Intermediate Challenge: Step-by-step guidance disabled. Inspect your node telemetry, connection pools, and downstream topology to resolve the bottleneck.
+            </div>
+          ) : (
+            <div className="font-mono text-[11px] text-rose-300/90 bg-rose-500/10 p-2 rounded border border-rose-500/20">
+              🔥 Hardcore Expert: No guidance provided. Strict 5-second SLA failure countdown active.
+            </div>
+          )}
         </div>
 
         {/* Action Button */}
@@ -111,7 +128,7 @@ export function ServerIncidentBanner() {
               onClick={inspectIncidentNode}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all shadow-md shadow-teal-950/30"
             >
-              <ExternalLink className="h-3.5 w-3.5" /> Inspect & Fix Server
+              <ExternalLink className="h-3.5 w-3.5" /> Inspect Node
             </button>
           )}
         </div>

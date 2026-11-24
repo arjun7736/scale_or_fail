@@ -28,7 +28,8 @@ export class FailureDetector {
     simSeconds: number,
     systemMetrics: SystemMetrics,
     componentMetrics: Record<string, ComponentLiveMetrics>,
-    newAlerts: SystemAlert[]
+    newAlerts: SystemAlert[],
+    difficulty: import('../core/types').DifficultyMode = 'beginner'
   ): { isGameOver: boolean; postmortem?: PostmortemReport } {
     this.peakRps = Math.max(this.peakRps, systemMetrics.incomingRps);
     this.peakConcurrency = Math.max(this.peakConcurrency, systemMetrics.inFlightRequests);
@@ -49,7 +50,7 @@ export class FailureDetector {
     }
 
     // Check for sustained crash condition:
-    // Sustained error rate > 50% for 12+ consecutive seconds, or 100% unavailability for 6 seconds
+    // Sustained error rate > 50% for N consecutive ticks (stricter in expert/intermediate)
     if (systemMetrics.errorRate > 0.85) {
       this.consecutiveCrashedTicks += 2;
     } else if (systemMetrics.errorRate > 0.45) {
@@ -60,7 +61,8 @@ export class FailureDetector {
       this.consecutiveCrashedTicks = Math.max(0, this.consecutiveCrashedTicks - 1);
     }
 
-    const isGameOver = this.consecutiveCrashedTicks >= 12;
+    const crashThreshold = difficulty === 'expert' ? 5 : difficulty === 'intermediate' ? 8 : 12;
+    const isGameOver = this.consecutiveCrashedTicks >= crashThreshold;
 
     if (isGameOver) {
       return {

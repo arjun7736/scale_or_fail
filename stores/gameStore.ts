@@ -202,6 +202,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setDifficulty: (difficulty: DifficultyMode) => {
+    get().bridge?.setDifficulty(difficulty);
     set({ difficulty });
   },
 

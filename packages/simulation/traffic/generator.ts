@@ -111,7 +111,10 @@ export class TrafficGenerator {
   /**
    * Calculates traffic parameters for a given simulation elapsed time in seconds.
    */
-  getTrafficForTick(simSeconds: number): {
+  getTrafficForTick(
+    simSeconds: number,
+    difficulty: import('../core/types').DifficultyMode = 'beginner'
+  ): {
     incomingRps: number;
     stage: number;
     stageName: string;
@@ -136,8 +139,9 @@ export class TrafficGenerator {
       currentStage.baseRpsStart +
       (currentStage.baseRpsEnd - currentStage.baseRpsStart) * stageProgress;
 
-    // Add organic wave variation (simulated micro-fluctuation)
-    const wave = Math.sin(simSeconds * 0.15) * 0.08 + Math.cos(simSeconds * 0.05) * 0.05;
+    // Add organic wave variation (higher amplitude in intermediate/expert)
+    const waveAmp = difficulty === 'expert' ? 0.22 : difficulty === 'intermediate' ? 0.14 : 0.08;
+    const wave = Math.sin(simSeconds * 0.15) * waveAmp + Math.cos(simSeconds * 0.05) * (waveAmp * 0.6);
     baseRps *= 1 + wave;
 
     // Check for stage traffic spike
@@ -147,16 +151,24 @@ export class TrafficGenerator {
       const spikeEnd = spikeStart + currentStage.spikeSeconds;
       if (stageElapsed >= spikeStart && stageElapsed <= spikeEnd) {
         isSpikeActive = true;
-        // Bell-shaped spike multiplier
+        // Bell-shaped spike multiplier with difficulty amplification
+        const spikeMultiplier =
+          difficulty === 'expert'
+            ? currentStage.spikeMultiplier * 1.35
+            : difficulty === 'intermediate'
+            ? currentStage.spikeMultiplier * 1.15
+            : currentStage.spikeMultiplier;
+
         const spikeProgress = (stageElapsed - spikeStart) / (spikeEnd - spikeStart);
         const spikePeak = Math.sin(spikeProgress * Math.PI);
-        const addedSpike = (currentStage.spikeMultiplier - 1.0) * spikePeak;
+        const addedSpike = (spikeMultiplier - 1.0) * spikePeak;
         baseRps *= 1.0 + addedSpike;
       }
     }
 
-    // Add deterministic micro-jitter (±3%)
-    const jitter = (this.prng.next() - 0.5) * 0.06;
+    // Add deterministic micro-jitter based on difficulty
+    const jitterMagnitude = difficulty === 'expert' ? 0.18 : difficulty === 'intermediate' ? 0.09 : 0.04;
+    const jitter = (this.prng.next() - 0.5) * (jitterMagnitude * 2);
     const finalRps = Math.max(1, Math.round(baseRps * (1 + jitter)));
 
     return {

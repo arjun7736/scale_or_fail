@@ -79,6 +79,12 @@ self.onmessage = (e: MessageEvent) => {
       }
       break;
     }
+    case 'SET_DIFFICULTY': {
+      if (payload) {
+        engine.setDifficulty(payload as DifficultyMode);
+      }
+      break;
+    }
     case 'RESET': {
       stopLoop();
       const seed = payload?.seed || 1337;

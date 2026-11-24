@@ -56,7 +56,7 @@ export class SimulationEngine {
     this.simSeconds++;
 
     // 1. Calculate incoming traffic for this tick
-    const trafficInfo = this.trafficGenerator.getTrafficForTick(this.simSeconds);
+    const trafficInfo = this.trafficGenerator.getTrafficForTick(this.simSeconds, this.difficulty);
     const decomposed = decomposeTraffic(trafficInfo.incomingRps);
 
     // 2. Route traffic through architecture graph
@@ -145,7 +145,8 @@ export class SimulationEngine {
       this.simSeconds,
       systemMetrics,
       routeResult.componentMetrics,
-      newAlerts
+      newAlerts,
+      this.difficulty
     );
 
     let postmortem: PostmortemReport | undefined;

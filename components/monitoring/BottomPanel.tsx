@@ -1,26 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  AreaChart,
-  Area,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-import {
-  Activity,
-  Clock,
-  AlertOctagon,
-  ListFilter,
-  Lightbulb,
-  Radio,
-} from 'lucide-react';
+import { Lightbulb, Radio } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
+import { TrafficPanel, LatencyPanel, ErrorRatePanel, LogsPanel } from './panels';
 
 export function BottomPanel() {
   const [mobileTab, setMobileTab] = useState<'traffic' | 'latency' | 'errors' | 'logs'>('traffic');
@@ -41,235 +24,6 @@ export function BottomPanel() {
   const isMinimized = bottomPanelMode === 'minimized';
   const isCompact = bottomPanelMode === 'compact';
   const isExpanded = bottomPanelMode === 'expanded';
-
-  // Component definition for Panel 1: Traffic
-  const renderTrafficPanel = () => (
-    <div className="flex flex-col h-full rounded-lg border border-slate-800 bg-slate-950/80 p-2 shadow-xs overflow-hidden">
-      <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-slate-800/80 text-[10px] font-mono">
-        <div className="flex items-center gap-1 font-semibold text-slate-200">
-          <Activity className="h-3 w-3 text-sky-400" />
-          <span>Traffic (RPS)</span>
-        </div>
-        <div className="flex items-center gap-1 text-[9px]">
-          <span className="text-sky-400 font-bold">{systemMetrics.incomingRps.toLocaleString()} in</span>
-          <span className="text-slate-600">/</span>
-          <span className="text-teal-400 font-bold">{systemMetrics.succeededRps.toLocaleString()} ok</span>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={metricsHistory} margin={{ top: 2, right: 4, left: -25, bottom: 0 }}>
-            <defs>
-              <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0} />
-              </linearGradient>
-              <linearGradient id="succeededGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="time" stroke="#475569" fontSize={8} tickLine={false} />
-            <YAxis stroke="#475569" fontSize={8} tickLine={false} width={30} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
-                borderRadius: '6px',
-                fontSize: '9px',
-                padding: '3px 6px',
-              }}
-            />
-            <Area
-              type="monotone"
-              dataKey="incomingRps"
-              stroke="#0ea5e9"
-              strokeWidth={1.5}
-              fillOpacity={1}
-              fill="url(#trafficGradient)"
-              name="Incoming"
-            />
-            <Area
-              type="monotone"
-              dataKey="succeededRps"
-              stroke="#14b8a6"
-              strokeWidth={1.5}
-              fillOpacity={1}
-              fill="url(#succeededGradient)"
-              name="Succeeded"
-            />
-            <Line
-              type="monotone"
-              dataKey="failedRps"
-              stroke="#f43f5e"
-              strokeWidth={1.5}
-              dot={false}
-              name="Failed"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-
-  // Component definition for Panel 2: Latency
-  const renderLatencyPanel = () => (
-    <div className="flex flex-col h-full rounded-lg border border-slate-800 bg-slate-950/80 p-2 shadow-xs overflow-hidden">
-      <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-slate-800/80 text-[10px] font-mono">
-        <div className="flex items-center gap-1 font-semibold text-slate-200">
-          <Clock className="h-3 w-3 text-amber-400" />
-          <span>Latency (ms)</span>
-        </div>
-        <div className="flex items-center gap-1 text-[9px]">
-          <span className="text-sky-300 font-bold">{systemMetrics.avgLatencyMs}ms avg</span>
-          <span className="text-slate-600">•</span>
-          <span className="text-amber-400 font-bold">{systemMetrics.p95LatencyMs}ms p95</span>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={metricsHistory} margin={{ top: 2, right: 4, left: -20, bottom: 0 }}>
-            <XAxis dataKey="time" stroke="#475569" fontSize={8} tickLine={false} />
-            <YAxis stroke="#475569" fontSize={8} tickLine={false} width={30} unit="ms" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
-                borderRadius: '6px',
-                fontSize: '9px',
-                padding: '3px 6px',
-              }}
-            />
-            <ReferenceLine
-              y={3000}
-              stroke="#f43f5e"
-              strokeDasharray="3 3"
-              label={{ value: '3s SLA', fill: '#f43f5e', fontSize: 8, position: 'top' }}
-            />
-            <Line
-              type="monotone"
-              dataKey="avgLatencyMs"
-              stroke="#38bdf8"
-              strokeWidth={1.5}
-              dot={false}
-              name="Avg Latency"
-            />
-            <Line
-              type="monotone"
-              dataKey="p95LatencyMs"
-              stroke="#f59e0b"
-              strokeWidth={1.5}
-              dot={false}
-              name="p95 Latency"
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-
-  // Component definition for Panel 3: Error Rate
-  const renderErrorPanel = () => (
-    <div className="flex flex-col h-full rounded-lg border border-slate-800 bg-slate-950/80 p-2 shadow-xs overflow-hidden">
-      <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-slate-800/80 text-[10px] font-mono">
-        <div className="flex items-center gap-1 font-semibold text-slate-200">
-          <AlertOctagon className="h-3 w-3 text-rose-400" />
-          <span>Error Rate (%)</span>
-        </div>
-        <div className="flex items-center gap-1 text-[9px]">
-          <span className={`font-bold ${parseFloat(errorPercent) > 5 ? 'text-rose-400 animate-pulse' : 'text-slate-300'}`}>
-            {errorPercent}% error
-          </span>
-          <span className="text-slate-600">•</span>
-          <span className="text-emerald-400 font-bold">{systemMetrics.slaUptimePercent.toFixed(1)}% SLA</span>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={metricsHistory} margin={{ top: 2, right: 4, left: -25, bottom: 0 }}>
-            <defs>
-              <linearGradient id="errorGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="time" stroke="#475569" fontSize={8} tickLine={false} />
-            <YAxis stroke="#475569" fontSize={8} tickLine={false} width={25} unit="%" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
-                borderRadius: '6px',
-                fontSize: '9px',
-                padding: '3px 6px',
-              }}
-            />
-            <ReferenceLine
-              y={5}
-              stroke="#f59e0b"
-              strokeDasharray="3 3"
-              label={{ value: '5% SLA', fill: '#f59e0b', fontSize: 8, position: 'top' }}
-            />
-            <Area
-              type="monotone"
-              dataKey="errorRatePercent"
-              stroke="#f43f5e"
-              strokeWidth={1.5}
-              fillOpacity={1}
-              fill="url(#errorGradient)"
-              name="Error Rate"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-
-  // Component definition for Panel 4: Logs
-  const renderLogsPanel = () => (
-    <div className="flex flex-col h-full rounded-lg border border-slate-800 bg-slate-950/80 p-2 shadow-xs overflow-hidden">
-      <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-slate-800/80 text-[10px] font-mono">
-        <div className="flex items-center gap-1 font-semibold text-slate-200">
-          <ListFilter className="h-3 w-3 text-indigo-400" />
-          <span>Event Logs ({alerts.length})</span>
-        </div>
-        <span className="text-[9px] text-slate-500 font-mono">Live</span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-1 pr-0.5 font-mono text-[9px]">
-        {alerts.length === 0 ? (
-          <div className="text-slate-500 text-center py-4">No events yet.</div>
-        ) : (
-          alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className="flex items-start gap-1 p-1 rounded bg-slate-900/70 border border-slate-800/60 leading-tight"
-            >
-              <span className="text-slate-500 shrink-0 text-[8px]">{alert.timestamp}</span>
-              <span
-                className={`px-1 py-0.2 rounded text-[8px] font-bold uppercase shrink-0 ${
-                  alert.severity === 'critical'
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                    : alert.severity === 'warning'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                }`}
-              >
-                {alert.severity === 'critical' ? 'CRIT' : alert.severity === 'warning' ? 'WARN' : 'INFO'}
-              </span>
-              <span className="text-slate-300 break-words flex-1 truncate">
-                <strong className="text-slate-200">{alert.title}: </strong>
-                {alert.message}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="border-t border-slate-800 bg-slate-950/95 flex flex-col transition-all duration-200 select-none shrink-0">
@@ -329,7 +83,7 @@ export function BottomPanel() {
         <div className="flex items-center bg-slate-900 rounded border border-slate-800 p-0.5 text-[9px] font-mono">
           <button
             onClick={() => setBottomPanelMode('minimized')}
-            className={`px-1.5 py-0.5 rounded transition-all ${
+            className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
               isMinimized
                 ? 'bg-slate-700 text-white font-bold'
                 : 'text-slate-400 hover:text-slate-200'
@@ -340,7 +94,7 @@ export function BottomPanel() {
           </button>
           <button
             onClick={() => setBottomPanelMode('compact')}
-            className={`px-1.5 py-0.5 rounded transition-all ${
+            className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
               isCompact
                 ? 'bg-teal-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200'
@@ -351,7 +105,7 @@ export function BottomPanel() {
           </button>
           <button
             onClick={() => setBottomPanelMode('expanded')}
-            className={`px-1.5 py-0.5 rounded transition-all ${
+            className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
               isExpanded
                 ? 'bg-slate-700 text-white font-bold'
                 : 'text-slate-400 hover:text-slate-200'
@@ -373,7 +127,7 @@ export function BottomPanel() {
               <div className="flex items-center bg-slate-950 rounded border border-slate-800 p-0.5">
                 <button
                   onClick={() => setMobileView('split')}
-                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all cursor-pointer ${
                     mobileView === 'split'
                       ? 'bg-teal-500 text-slate-950 font-bold'
                       : 'text-slate-400 hover:text-slate-200'
@@ -383,7 +137,7 @@ export function BottomPanel() {
                 </button>
                 <button
                   onClick={() => setMobileView('tabs')}
-                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all cursor-pointer ${
                     mobileView === 'tabs'
                       ? 'bg-teal-500 text-slate-950 font-bold'
                       : 'text-slate-400 hover:text-slate-200'
@@ -398,7 +152,7 @@ export function BottomPanel() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setMobileTab('traffic')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
                     mobileTab === 'traffic'
                       ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/40'
                       : 'text-slate-400'
@@ -408,7 +162,7 @@ export function BottomPanel() {
                 </button>
                 <button
                   onClick={() => setMobileTab('latency')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
                     mobileTab === 'latency'
                       ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40'
                       : 'text-slate-400'
@@ -418,7 +172,7 @@ export function BottomPanel() {
                 </button>
                 <button
                   onClick={() => setMobileTab('errors')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
                     mobileTab === 'errors'
                       ? 'bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40'
                       : 'text-slate-400'
@@ -428,7 +182,7 @@ export function BottomPanel() {
                 </button>
                 <button
                   onClick={() => setMobileTab('logs')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
                     mobileTab === 'logs'
                       ? 'bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40'
                       : 'text-slate-400'
@@ -446,10 +200,22 @@ export function BottomPanel() {
               isCompact ? 'h-40 md:h-44' : 'h-60 md:h-64'
             } p-2 grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-900/40 transition-all duration-200`}
           >
-            {renderTrafficPanel()}
-            {renderLatencyPanel()}
-            {renderErrorPanel()}
-            {renderLogsPanel()}
+            <TrafficPanel
+              metricsHistory={metricsHistory}
+              incomingRps={systemMetrics.incomingRps}
+              succeededRps={systemMetrics.succeededRps}
+            />
+            <LatencyPanel
+              metricsHistory={metricsHistory}
+              avgLatencyMs={systemMetrics.avgLatencyMs}
+              p95LatencyMs={systemMetrics.p95LatencyMs}
+            />
+            <ErrorRatePanel
+              metricsHistory={metricsHistory}
+              errorPercent={errorPercent}
+              slaUptimePercent={systemMetrics.slaUptimePercent}
+            />
+            <LogsPanel alerts={alerts} />
           </div>
 
           {/* Mobile Display */}
@@ -460,10 +226,22 @@ export function BottomPanel() {
                   isCompact ? 'h-72' : 'h-96'
                 } p-1.5 grid grid-cols-2 gap-1.5 bg-slate-900/40 overflow-y-auto transition-all duration-200`}
               >
-                {renderTrafficPanel()}
-                {renderLatencyPanel()}
-                {renderErrorPanel()}
-                {renderLogsPanel()}
+                <TrafficPanel
+                  metricsHistory={metricsHistory}
+                  incomingRps={systemMetrics.incomingRps}
+                  succeededRps={systemMetrics.succeededRps}
+                />
+                <LatencyPanel
+                  metricsHistory={metricsHistory}
+                  avgLatencyMs={systemMetrics.avgLatencyMs}
+                  p95LatencyMs={systemMetrics.p95LatencyMs}
+                />
+                <ErrorRatePanel
+                  metricsHistory={metricsHistory}
+                  errorPercent={errorPercent}
+                  slaUptimePercent={systemMetrics.slaUptimePercent}
+                />
+                <LogsPanel alerts={alerts} />
               </div>
             ) : (
               <div
@@ -471,10 +249,28 @@ export function BottomPanel() {
                   isCompact ? 'h-36' : 'h-52'
                 } p-1.5 bg-slate-900/40 transition-all duration-200`}
               >
-                {mobileTab === 'traffic' && renderTrafficPanel()}
-                {mobileTab === 'latency' && renderLatencyPanel()}
-                {mobileTab === 'errors' && renderErrorPanel()}
-                {mobileTab === 'logs' && renderLogsPanel()}
+                {mobileTab === 'traffic' && (
+                  <TrafficPanel
+                    metricsHistory={metricsHistory}
+                    incomingRps={systemMetrics.incomingRps}
+                    succeededRps={systemMetrics.succeededRps}
+                  />
+                )}
+                {mobileTab === 'latency' && (
+                  <LatencyPanel
+                    metricsHistory={metricsHistory}
+                    avgLatencyMs={systemMetrics.avgLatencyMs}
+                    p95LatencyMs={systemMetrics.p95LatencyMs}
+                  />
+                )}
+                {mobileTab === 'errors' && (
+                  <ErrorRatePanel
+                    metricsHistory={metricsHistory}
+                    errorPercent={errorPercent}
+                    slaUptimePercent={systemMetrics.slaUptimePercent}
+                  />
+                )}
+                {mobileTab === 'logs' && <LogsPanel alerts={alerts} />}
               </div>
             )}
           </div>

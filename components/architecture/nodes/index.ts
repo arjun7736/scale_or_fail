@@ -3,15 +3,31 @@ import { ServerNode } from './ServerNode';
 import { DatabaseNode } from './DatabaseNode';
 import { CacheNode } from './CacheNode';
 import { LoadBalancerNode } from './LoadBalancerNode';
-import { QueueNode, CdnNode, RateLimiterNode } from './SpecialNodes';
-import {
-  DbShardingNode,
-  KafkaStreamNode,
-  AnycastEdgeNode,
-  CircuitBreakerNode,
-  L4MaglevNode,
-  DistributedNosqlNode,
-} from './HyperscaleNodes';
+import { QueueNode } from './QueueNode';
+import { CdnNode } from './CdnNode';
+import { RateLimiterNode } from './RateLimiterNode';
+import { DbShardingNode } from './DbShardingNode';
+import { KafkaStreamNode } from './KafkaStreamNode';
+import { AnycastEdgeNode } from './AnycastEdgeNode';
+import { CircuitBreakerNode } from './CircuitBreakerNode';
+import { L4MaglevNode } from './L4MaglevNode';
+import { DistributedNosqlNode } from './DistributedNosqlNode';
+
+export * from './ClientNode';
+export * from './ServerNode';
+export * from './DatabaseNode';
+export * from './CacheNode';
+export * from './LoadBalancerNode';
+export * from './QueueNode';
+export * from './CdnNode';
+export * from './RateLimiterNode';
+export * from './DbShardingNode';
+export * from './KafkaStreamNode';
+export * from './AnycastEdgeNode';
+export * from './CircuitBreakerNode';
+export * from './L4MaglevNode';
+export * from './DistributedNosqlNode';
+export * from './NodeValidationBadge';
 
 export const nodeTypes = {
   client: ClientNode,

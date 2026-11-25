@@ -1,14 +1,9 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { Header } from '@/components/game/Header';
-import { Toolbox } from '@/components/architecture/Toolbox';
-import { ArchitectureCanvas } from '@/components/architecture/ArchitectureCanvas';
-import { NodeConfigDrawer } from '@/components/architecture/NodeConfigDrawer';
-import { TelemetrySidebar } from '@/components/monitoring/TelemetrySidebar';
-import { BottomPanel } from '@/components/monitoring/BottomPanel';
-import { GameModal } from '@/components/game/GameModal';
-import { ServerIncidentBanner } from '@/components/game/ServerIncidentBanner';
+import { Header, GameModal, ServerIncidentBanner } from '@/components/game';
+import { Toolbox, ArchitectureCanvas, NodeConfigDrawer } from '@/components/architecture';
+import { TelemetrySidebar, BottomPanel } from '@/components/monitoring';
 import { useGameStore } from '@/stores/gameStore';
 
 export default function Home() {

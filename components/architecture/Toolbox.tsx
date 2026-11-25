@@ -1,237 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  Server,
-  Database,
-  Split,
-  Zap,
-  Layers,
-  ShieldCheck,
-  Gauge,
-  Plus,
-  Lock,
-  Boxes,
-  Activity,
-  Globe,
-  ShieldAlert,
-  Network,
-  HardDrive,
-  Sparkles,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-  LayoutList,
-  Columns,
-  X,
-  Check,
-  AlertCircle,
-} from 'lucide-react';
-import { ComponentType } from '@/packages/simulation/core/types';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { useGameStore } from '@/stores/gameStore';
-import { checkComponentLimit, getComponentCount } from '@/packages/simulation/models/limits';
+import { checkComponentLimit } from '@/packages/simulation/models/limits';
+import { TOOLBOX_ITEMS, ToolboxItem } from './toolbox/toolbox-catalog';
+import { ToolboxRail } from './toolbox/ToolboxRail';
+import { ToolboxCard } from './toolbox/ToolboxCard';
+import { ToolboxHeader } from './toolbox/ToolboxHeader';
 
-interface ToolboxItem {
-  id: string;
-  type: ComponentType;
-  title: string;
-  category: string;
-  description: string;
-  costPerHour: string;
-  unlockStage: number;
-  unlockStageName: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
-}
-
-const TOOLBOX_ITEMS: ToolboxItem[] = [
-  // STAGE 1: Startup
-  {
-    id: 'app_server',
-    type: 'app_server',
-    title: 'App Server (Node/Go)',
-    category: 'Compute Tier',
-    description: 'Stateless compute worker (Node.js/Go/Java) executing business logic and querying backend storage.',
-    costPerHour: '$0.04 - $1.10/hr',
-    unlockStage: 1,
-    unlockStageName: 'Startup',
-    icon: <Server className="h-4 w-4" />,
-    iconBg: 'bg-teal-500/10 border-teal-500/20',
-    iconColor: 'text-teal-400',
-  },
-  {
-    id: 'database',
-    type: 'database',
-    title: 'PostgreSQL Database',
-    category: 'Relational Storage',
-    description: 'Primary ACID write master. Once deployed, scale read throughput with Read Replicas.',
-    costPerHour: '$0.06 - $1.40/hr',
-    unlockStage: 1,
-    unlockStageName: 'Startup',
-    icon: <Database className="h-4 w-4" />,
-    iconBg: 'bg-purple-500/10 border-purple-500/20',
-    iconColor: 'text-purple-400',
-  },
-
-  // STAGE 2: Growth
-  {
-    id: 'load_balancer',
-    type: 'load_balancer',
-    title: 'L7 Load Balancer (ALB)',
-    category: 'Traffic Ingress',
-    description: 'Layer 7 reverse proxy (Nginx/Envoy/AWS ALB) distributing HTTP traffic evenly with active health checking.',
-    costPerHour: '$0.05/hr',
-    unlockStage: 2,
-    unlockStageName: 'Growth',
-    icon: <Split className="h-4 w-4" />,
-    iconBg: 'bg-amber-500/10 border-amber-500/20',
-    iconColor: 'text-amber-400',
-  },
-
-  // STAGE 3: Viral Traffic
-  {
-    id: 'redis_cache',
-    type: 'redis_cache',
-    title: 'Redis Cache Cluster',
-    category: 'In-Memory Caching',
-    description: 'In-memory distributed cache (Redis/Memcached) absorbing 80-90% of read queries in sub-millisecond RAM.',
-    costPerHour: '$0.08/hr',
-    unlockStage: 3,
-    unlockStageName: 'Viral Traffic',
-    icon: <Zap className="h-4 w-4" />,
-    iconBg: 'bg-rose-500/10 border-rose-500/20',
-    iconColor: 'text-rose-400',
-  },
-
-  // STAGE 4: Database Bottleneck
-  {
-    id: 'cdn',
-    type: 'cdn',
-    title: 'Cloud CDN (Cloudflare)',
-    category: 'Global Edge Network',
-    description: 'Global Edge Network (Cloudflare/CloudFront) caching public GET requests at edge POPs before origin.',
-    costPerHour: '$0.05/hr',
-    unlockStage: 4,
-    unlockStageName: 'DB Bottleneck',
-    icon: <Globe className="h-4 w-4" />,
-    iconBg: 'bg-cyan-500/10 border-cyan-500/20',
-    iconColor: 'text-cyan-400',
-  },
-  {
-    id: 'rate_limiter',
-    type: 'rate_limiter',
-    title: 'Rate Limiter (Envoy)',
-    category: 'Ingress Perimeter',
-    description: 'API gateway token bucket (Envoy/Redis) rejecting abusive traffic bursts with HTTP 429 Too Many Requests.',
-    costPerHour: '$0.02/hr',
-    unlockStage: 4,
-    unlockStageName: 'DB Bottleneck',
-    icon: <Gauge className="h-4 w-4" />,
-    iconBg: 'bg-amber-500/10 border-amber-500/20',
-    iconColor: 'text-amber-400',
-  },
-
-  // STAGE 5: Flash Sale Spikes
-  {
-    id: 'message_queue',
-    type: 'message_queue',
-    title: 'Message Queue (RabbitMQ)',
-    category: 'Async Processing',
-    description: 'Message broker (RabbitMQ/SQS) buffering write bursts so workers process jobs at a steady drain rate.',
-    costPerHour: '$0.07/hr',
-    unlockStage: 5,
-    unlockStageName: 'Flash Sale',
-    icon: <Layers className="h-4 w-4" />,
-    iconBg: 'bg-indigo-500/10 border-indigo-500/20',
-    iconColor: 'text-indigo-400',
-  },
-
-  // STAGE 6: Distributed Systems
-  {
-    id: 'db_sharding',
-    type: 'db_sharding',
-    title: 'DB Sharding Router (Vitess)',
-    category: 'Horizontal Partitions',
-    description: 'Horizontal database coordinator (Vitess/Citus) hash-partitioning primary writes across isolated shards.',
-    costPerHour: '$0.25/hr',
-    unlockStage: 6,
-    unlockStageName: 'Distributed Systems',
-    icon: <Database className="h-4 w-4" />,
-    iconBg: 'bg-purple-500/10 border-purple-500/20',
-    iconColor: 'text-purple-400',
-  },
-  {
-    id: 'kafka_stream',
-    type: 'kafka_stream',
-    title: 'Kafka Event Log Cluster',
-    category: 'Event Streaming',
-    description: 'Distributed commit log (Apache Kafka/Pulsar) streaming millions of async partitioned events/sec.',
-    costPerHour: '$0.18/hr',
-    unlockStage: 6,
-    unlockStageName: 'Distributed Systems',
-    icon: <Activity className="h-4 w-4" />,
-    iconBg: 'bg-amber-500/10 border-amber-500/20',
-    iconColor: 'text-amber-400',
-  },
-
-  // STAGE 7: Hyperscale (1M Milestone)
-  {
-    id: 'anycast_edge',
-    type: 'anycast_edge',
-    title: 'Anycast GeoDNS (Route 53)',
-    category: 'Global Ingress',
-    description: 'BGP Anycast routing (AWS Route 53/Cloudflare) directing worldwide traffic to the lowest-latency edge POP.',
-    costPerHour: '$0.15/hr',
-    unlockStage: 7,
-    unlockStageName: 'Hyperscale',
-    icon: <Globe className="h-4 w-4" />,
-    iconBg: 'bg-cyan-500/10 border-cyan-500/20',
-    iconColor: 'text-cyan-400',
-  },
-  {
-    id: 'circuit_breaker',
-    type: 'circuit_breaker',
-    title: 'Circuit Breaker (Hystrix)',
-    category: 'Fault Tolerance',
-    description: 'Adaptive load shedder (Netflix Hystrix/Resilience4j) automatically shedding non-critical load during saturation.',
-    costPerHour: '$0.03/hr',
-    unlockStage: 7,
-    unlockStageName: 'Hyperscale',
-    icon: <ShieldAlert className="h-4 w-4" />,
-    iconBg: 'bg-rose-500/10 border-rose-500/20',
-    iconColor: 'text-rose-400',
-  },
-
-  // STAGE 8: Endless Survival / Mega Hyperscale (10M - 100M)
-  {
-    id: 'l4_maglev',
-    type: 'l4_maglev',
-    title: 'Kernel L4 Maglev (Katran)',
-    category: 'Hyperscale Ingress',
-    description: 'Kernel-bypass L4 load balancer (Google Maglev/Meta Katran) with Direct Server Return (DSR) routing 100M+ pps.',
-    costPerHour: '$0.12/hr',
-    unlockStage: 8,
-    unlockStageName: 'Endless Survival',
-    icon: <Network className="h-4 w-4" />,
-    iconBg: 'bg-emerald-500/10 border-emerald-500/20',
-    iconColor: 'text-emerald-400',
-  },
-  {
-    id: 'distributed_nosql',
-    type: 'distributed_nosql',
-    title: 'Distributed NoSQL (Cassandra)',
-    category: 'Hyperscale Storage',
-    description: 'Decentralized quorum storage (Cassandra/DynamoDB/ScyllaDB) with masterless horizontal write scaling.',
-    costPerHour: '$0.35/hr',
-    unlockStage: 8,
-    unlockStageName: 'Endless Survival',
-    icon: <HardDrive className="h-4 w-4" />,
-    iconBg: 'bg-violet-500/10 border-violet-500/20',
-    iconColor: 'text-violet-400',
-  },
-];
+export { TOOLBOX_ITEMS };
+export type { ToolboxItem };
 
 export function Toolbox() {
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
@@ -337,335 +116,43 @@ export function Toolbox() {
 
       {/* COMPACT ICON RAIL MODE */}
       {isToolboxRail ? (
-        <div className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-r border-slate-800/80 w-14 select-none shrink-0 items-center py-2.5 space-y-2 shadow-2xl md:shadow-none animate-in slide-in-from-left duration-200">
-          <button
-            onClick={toggleToolboxRail}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Expand to Full Card View"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-
-          <div className="w-8 h-px bg-slate-800" />
-
-          <div className="flex-1 overflow-y-auto overflow-x-hidden w-full flex flex-col items-center space-y-2 px-1">
-            {TOOLBOX_ITEMS.map((item) => {
-              const isLocked = currentStage < item.unlockStage;
-              const limitCheck = checkComponentLimit(nodes, item.id, item.type);
-              const isLimitReached = !limitCheck.allowed;
-              const isDatabaseWithPrimary = item.id === 'database' && isLimitReached;
-              const replicaCount = item.id === 'database' ? getComponentCount(nodes, 'db_replica', 'database') : 0;
-              const isReplicaLimitReached = replicaCount >= 8;
-              const isDisabled = isLocked || (isLimitReached && !isDatabaseWithPrimary) || (isDatabaseWithPrimary && isReplicaLimitReached);
-              const title = isDatabaseWithPrimary ? `PostgreSQL Read Replica (${replicaCount}/8)` : item.title;
-
-              return (
-                <button
-                  key={item.id}
-                  draggable={!isDisabled}
-                  onDragStart={(e) => handleDragStart(e, item)}
-                  onClick={() => handleQuickAdd(item)}
-                  className={`relative group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                    isDisabled
-                      ? 'border-slate-800/60 bg-slate-950/40 text-slate-600 cursor-not-allowed'
-                      : isDatabaseWithPrimary
-                      ? 'border-purple-500/40 bg-purple-500/10 text-purple-400 hover:scale-105 active:scale-95 cursor-pointer'
-                      : `${item.iconBg} ${item.iconColor} hover:scale-105 active:scale-95 cursor-pointer`
-                  }`}
-                  title={`${title} (${item.costPerHour})${
-                    isLocked
-                      ? ` • Locked until Stage ${item.unlockStage}`
-                      : isDatabaseWithPrimary
-                      ? ` • Primary active (1/1) - Tap/drag to deploy Read Replica (${replicaCount}/8)`
-                      : isLimitReached
-                      ? ' • In Use (Single Instance Limit: 1)'
-                      : ' • Tap or drag to deploy'
-                  }`}
-                >
-                  {isLocked ? (
-                    <Lock className="h-3.5 w-3.5" />
-                  ) : isLimitReached ? (
-                    item.icon
-                  ) : (
-                    item.icon
-                  )}
-
-                  {isLocked && (
-                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40 text-[8px] font-mono text-amber-300">
-                      {item.unlockStage}
-                    </span>
-                  )}
-
-                  {!isLocked && isLimitReached && (
-                    <span
-                      className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-teal-500/20 border border-teal-500/40 text-[8px] font-mono text-teal-300"
-                      title="Already deployed in topology (Limit: 1)"
-                    >
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="text-[9px] font-mono text-slate-500 text-center">
-            S{currentStage}
-          </div>
-        </div>
+        <ToolboxRail
+          currentStage={currentStage}
+          nodes={nodes}
+          onToggleRail={toggleToolboxRail}
+          onDragStart={handleDragStart}
+          onQuickAdd={handleQuickAdd}
+        />
       ) : (
         /* FULL COMPACT DRAWER MODE */
         <div className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-r border-slate-800/80 w-72 max-w-[85vw] select-none shrink-0 shadow-2xl md:shadow-none animate-in slide-in-from-left duration-200">
           {/* Header */}
-          <div className="p-2.5 border-b border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                  Toolbox
-                </h2>
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300">
-                  S{currentStage}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={toggleToolboxRail}
-                  className="hidden md:inline-flex p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                  title="Collapse to Icon Rail"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={toggleToolbox}
-                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                  title="Close Toolbox"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Tap-to-Deploy Alert Banner on Mobile */}
-            <div className="md:hidden flex items-center justify-between px-2 py-1 rounded bg-teal-500/10 border border-teal-500/20 text-[10px] text-teal-300 font-mono">
-              <span>👉 Tap any card to deploy to canvas</span>
-              <span className="text-slate-400 text-[9px]">Tap X to exit</span>
-            </div>
-
-            {/* Limit Warning Alert */}
-            {limitWarning && (
-              <div className="px-2 py-1.5 rounded bg-amber-500/15 border border-amber-500/40 text-[10px] text-amber-300 font-mono animate-in fade-in flex items-start gap-1.5">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" />
-                <span className="leading-tight">{limitWarning}</span>
-              </div>
-            )}
-
-            {/* Success feedback when component is deployed */}
-            {lastAddedTitle && !limitWarning && (
-              <div className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono animate-in fade-in">
-                ✓ Deployed {lastAddedTitle} to canvas!
-              </div>
-            )}
-
-            {/* Quick Search */}
-            <div className="relative">
-              <Search className="h-3 w-3 absolute left-2 top-2 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search components..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950/70 border border-slate-800 rounded-lg pl-7 pr-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/50"
-              />
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1 p-0.5 rounded-md bg-slate-950/70 border border-slate-800/80 text-[10px] font-medium font-mono">
-              <button
-                onClick={() => setFilter('all')}
-                className={`flex-1 py-0.5 rounded text-center transition-all ${
-                  filter === 'all'
-                    ? 'bg-slate-800 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                All ({TOOLBOX_ITEMS.length})
-              </button>
-              <button
-                onClick={() => setFilter('unlocked')}
-                className={`flex-1 py-0.5 rounded text-center transition-all ${
-                  filter === 'unlocked'
-                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Unlocked ({unlockedCount})
-              </button>
-              <button
-                onClick={() => setFilter('locked')}
-                className={`flex-1 py-0.5 rounded text-center transition-all ${
-                  filter === 'locked'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Locked ({lockedCount})
-              </button>
-            </div>
-          </div>
+          <ToolboxHeader
+            currentStage={currentStage}
+            filter={filter}
+            searchQuery={searchQuery}
+            limitWarning={limitWarning}
+            lastAddedTitle={lastAddedTitle}
+            unlockedCount={unlockedCount}
+            lockedCount={lockedCount}
+            onFilterChange={setFilter}
+            onSearchChange={setSearchQuery}
+            onToggleRail={toggleToolboxRail}
+            onClose={toggleToolbox}
+          />
 
           {/* Component Cards List */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-            {filteredItems.map((item) => {
-              const isLocked = currentStage < item.unlockStage;
-              const isNewlyUnlocked = currentStage === item.unlockStage;
-              const limitCheck = checkComponentLimit(nodes, item.id, item.type);
-              const isLimitReached = !limitCheck.allowed;
-              const isDatabaseWithPrimary = item.id === 'database' && isLimitReached;
-              const replicaCount = item.id === 'database' ? getComponentCount(nodes, 'db_replica', 'database') : 0;
-              const isReplicaLimitReached = replicaCount >= 8;
-              const isMulti = item.id === 'app_server';
-              const isDisabled = isLocked || (isLimitReached && !isDatabaseWithPrimary) || (isDatabaseWithPrimary && isReplicaLimitReached);
-
-              const title = isDatabaseWithPrimary ? 'PostgreSQL Read Replica' : item.title;
-              const category = isDatabaseWithPrimary
-                ? replicaCount > 0 ? `Read Replicas (${replicaCount}/8)` : 'Read Replica DB'
-                : item.category;
-              const description = isDatabaseWithPrimary
-                ? 'Read-only SQL replica offloading read queries from the Primary Write Master.'
-                : item.description;
-
-              return (
-                <div
-                  key={item.id}
-                  draggable={!isDisabled}
-                  onDragStart={(e) => handleDragStart(e, item)}
-                  onClick={() => handleQuickAdd(item)}
-                  className={`group relative rounded-lg border p-2 transition-all select-none ${
-                    isLocked
-                      ? 'border-slate-800/40 bg-slate-950/20 opacity-60 hover:opacity-75 cursor-not-allowed'
-                      : isDatabaseWithPrimary
-                      ? 'border-purple-500/30 bg-purple-950/20 hover:border-purple-500/50 hover:bg-purple-950/30 cursor-pointer shadow-xs'
-                      : isLimitReached
-                      ? 'border-slate-800/50 bg-slate-950/40 opacity-75 hover:border-slate-700 cursor-not-allowed'
-                      : 'border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/30 active:scale-[0.98] cursor-pointer shadow-xs'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
-                          isLocked
-                            ? 'border-slate-800 bg-slate-900 text-slate-500'
-                            : isDatabaseWithPrimary
-                            ? 'border-purple-500/40 bg-purple-900/40 text-purple-300'
-                            : isLimitReached
-                            ? 'border-slate-800 bg-slate-900/80 text-slate-400'
-                            : `${item.iconBg} ${item.iconColor}`
-                        }`}
-                      >
-                        {isLocked ? (
-                          <Lock className="h-3 w-3" />
-                        ) : (
-                          item.icon
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1">
-                          <span
-                            className={`text-[11px] font-semibold truncate ${
-                              isLocked
-                                ? 'text-slate-400'
-                                : isDatabaseWithPrimary
-                                ? 'text-purple-200 group-hover:text-white'
-                                : isLimitReached
-                                ? 'text-slate-300'
-                                : 'text-slate-200 group-hover:text-white'
-                            }`}
-                          >
-                            {title}
-                          </span>
-                          {isNewlyUnlocked && (
-                            <span className="text-[8px] font-mono px-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                              NEW
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[9px] text-slate-500 font-mono truncate">
-                          {item.costPerHour} • {category}
-                        </div>
-                      </div>
-                    </div>
-
-                    {isLocked ? (
-                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-400/90 shrink-0">
-                        Stage {item.unlockStage}
-                      </span>
-                    ) : isDatabaseWithPrimary ? (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {isReplicaLimitReached ? (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-teal-400">
-                            Max (8/8)
-                          </span>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuickAdd(item);
-                            }}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-medium transition-colors shadow-xs"
-                            title="Deploy Read Replica"
-                          >
-                            <Plus className="h-3 w-3" /> Add Replica
-                          </button>
-                        )}
-                      </div>
-                    ) : isLimitReached ? (
-                      <span
-                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-teal-400/90 flex items-center gap-1 shrink-0"
-                        title={limitCheck.reason}
-                      >
-                        <Check className="h-2.5 w-2.5 text-teal-400" /> In Use (1/1)
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {isMulti && limitCheck.currentCount > 0 && (
-                          <span className="text-[9px] font-mono text-teal-400/80">
-                            {limitCheck.currentCount} active
-                          </span>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickAdd(item);
-                          }}
-                          className="flex h-6 w-6 items-center justify-center rounded bg-slate-800 hover:bg-teal-500/20 hover:text-teal-400 text-slate-300 transition-colors"
-                          title="Deploy to canvas"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="mt-1 text-[10px] text-slate-400 line-clamp-1 group-hover:line-clamp-none transition-all">
-                    {description}
-                  </p>
-
-                  {/* Limit Hint Chip if component is single-instance and in use */}
-                  {!isLocked && isDatabaseWithPrimary && (
-                    <div className="mt-1 text-[9px] font-mono text-purple-400/90 flex items-center justify-between">
-                      <span>✓ Primary active (1/1). Click or drag to add Read Replica ({replicaCount}/8).</span>
-                    </div>
-                  )}
-                  {!isLocked && isLimitReached && !isDatabaseWithPrimary && (
-                    <div className="mt-1 text-[9px] font-mono text-slate-500 flex items-center gap-1">
-                      <span>🔒 Limit: 1 per architecture. Remove to redeploy.</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {filteredItems.map((item) => (
+              <ToolboxCard
+                key={item.id}
+                item={item}
+                currentStage={currentStage}
+                nodes={nodes}
+                onDragStart={handleDragStart}
+                onQuickAdd={handleQuickAdd}
+              />
+            ))}
           </div>
 
           {/* Footer */}
@@ -673,7 +160,7 @@ export function Toolbox() {
             <span className="text-slate-500 truncate">Stage {currentStage}: {currentStageName}</span>
             <button
               onClick={toggleToolbox}
-              className="text-teal-400 hover:underline text-[10px] md:hidden"
+              className="text-teal-400 hover:underline text-[10px] md:hidden cursor-pointer"
             >
               Close
             </button>

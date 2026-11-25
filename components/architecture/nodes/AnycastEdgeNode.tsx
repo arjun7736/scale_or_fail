@@ -1,0 +1,59 @@
+'use client';
+
+import React from 'react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Globe, Settings } from 'lucide-react';
+import { useGameStore } from '@/stores/gameStore';
+import { useArchitectureStore } from '@/stores/architectureStore';
+import { AnycastEdgeNodeConfig } from '@/packages/simulation/core/types';
+
+export function AnycastEdgeNode({ id, data }: NodeProps) {
+  const metrics = useGameStore((s) => s.componentMetrics[id]);
+  const selectNode = useArchitectureStore((s) => s.selectNode);
+  const selectedNodeId = useArchitectureStore((s) => s.selectedNodeId);
+
+  const isSelected = selectedNodeId === id;
+  const config = data?.config as AnycastEdgeNodeConfig;
+
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      className={`relative rounded-xl border bg-slate-900/95 p-3.5 shadow-xl backdrop-blur-md min-w-[210px] cursor-pointer transition-all hover:border-slate-600 ${
+        isSelected ? 'border-cyan-400 shadow-cyan-950/30' : 'border-slate-800'
+      }`}
+    >
+      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !rounded-full !border-2 !border-slate-900 !bg-cyan-400" />
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+            <Globe className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slate-100 flex items-center gap-1.5">
+              <span>{(data?.label as string) || 'Anycast GeoDNS'}</span>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            </div>
+            <div className="text-[10px] text-cyan-400 font-mono">
+              BGP ANYCAST • {config?.edgePops || 64} POPs
+            </div>
+          </div>
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); selectNode(id); }} className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer">
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="space-y-1 rounded-lg bg-slate-950/70 p-2 border border-slate-800/80 font-mono text-[10px]">
+        <div className="flex justify-between text-slate-400">
+          <span>Latency Reduction:</span>
+          <span className="text-emerald-400 font-semibold">-{config?.latencyReductionMs || 35}ms RTT</span>
+        </div>
+        <div className="flex justify-between text-slate-400">
+          <span>Global Ingress:</span>
+          <span className="text-slate-200">{(metrics?.throughputInRps || 0).toLocaleString()} RPS</span>
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !rounded-full !border-2 !border-slate-900 !bg-cyan-400" />
+    </div>
+  );
+}

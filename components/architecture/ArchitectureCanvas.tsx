@@ -17,6 +17,7 @@ import { edgeTypes } from './edges';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { useGameStore } from '@/stores/gameStore';
 import { ComponentType } from '@/packages/simulation/core/types';
+import { ArchitectureAnalysisModal } from './ArchitectureAnalysisModal';
 
 function CanvasInternal() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -37,6 +38,8 @@ function CanvasInternal() {
   const togglePause = useGameStore((s) => s.togglePause);
   const autoPauseOnEdit = useGameStore((s) => s.autoPauseOnEdit);
   const setAutoPauseOnEdit = useGameStore((s) => s.setAutoPauseOnEdit);
+  const openAnalysisModal = useGameStore((s) => s.openAnalysisModal);
+  const validationResult = useArchitectureStore((s) => s.validationResult);
 
   // Global Spacebar shortcut for instant Pause / Resume
   useEffect(() => {
@@ -98,6 +101,29 @@ function CanvasInternal() {
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
+      {/* Architecture Health & Analyze Button (Top-left inside canvas) */}
+      <div className="absolute top-2 left-2 sm:top-3 sm:left-4 z-20 flex items-center gap-1.5 sm:gap-2">
+        <button
+          onClick={openAnalysisModal}
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-teal-500/40 bg-slate-950/90 text-teal-300 hover:text-white hover:bg-teal-600/20 shadow-lg shadow-teal-950/40 backdrop-blur-md font-mono text-[10px] sm:text-[11px] font-bold transition-all group cursor-pointer"
+          title="Analyze system architecture, design dimensions, and get educational feedback"
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-teal-400 group-hover:scale-110 transition-transform" />
+          <span>Analyze Architecture</span>
+          {validationResult && validationResult.issues.length > 0 && (
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                validationResult.issues.some((i) => i.severity === 'error')
+                  ? 'bg-rose-500 text-white animate-pulse'
+                  : 'bg-amber-500 text-slate-950'
+              }`}
+            >
+              {validationResult.issues.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Floating Architecture Scaling / Maintenance HUD - Docked top-right to prevent banner collision */}
       {gameStatus === 'paused' && (
         <div className="absolute top-2 right-2 sm:top-3 sm:right-4 z-20 flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-amber-500/40 bg-slate-950/90 shadow-xl shadow-amber-950/30 backdrop-blur-md animate-in fade-in slide-in-from-top-1">
@@ -195,6 +221,9 @@ function CanvasInternal() {
           className="!bg-slate-900/90 !border !border-slate-800 !rounded-xl !overflow-hidden !shadow-xl [&>button]:!bg-slate-900 [&>button]:!border-b [&>button]:!border-slate-800 [&>button]:!fill-slate-300 [&>button:hover]:!bg-slate-800"
         />
       </ReactFlow>
+
+      {/* Intelligent Architecture Analysis Modal */}
+      <ArchitectureAnalysisModal />
     </div>
   );
 }

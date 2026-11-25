@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  ArchitectureAssessment,
   ComponentLiveMetrics,
   DifficultyMode,
   EdgeLiveMetrics,
@@ -12,6 +13,7 @@ import {
   diagnoseServerIncident,
   ServerIncidentDiagnosis,
 } from '../packages/simulation/failures/diagnosis';
+import { validateArchitecture } from '../packages/simulation/validation';
 import { SimulationBridge } from '../lib/simulation-bridge';
 import { useArchitectureStore, registerArchitectureEditListener } from './architectureStore';
 
@@ -42,6 +44,8 @@ export interface GameState {
   activeContextualHint: string | null;
   activeIncident: ServerIncidentDiagnosis | null;
   autoPauseOnEdit: boolean;
+  architectureAssessment: ArchitectureAssessment | null;
+  isAnalysisModalOpen: boolean;
 
   // Layout & UI Density Controls
   isToolboxOpen: boolean;
@@ -72,6 +76,10 @@ export interface GameState {
   inspectIncidentNode: () => void;
   syncGraph: () => void;
   updateNodeConfigInGame: (nodeId: string, newConfig: any) => void;
+  openAnalysisModal: () => void;
+  closeAnalysisModal: () => void;
+  toggleAnalysisModal: () => void;
+  runArchitectureAnalysis: () => ArchitectureAssessment;
 }
 
 const INITIAL_SYSTEM_METRICS: SystemMetrics = {
@@ -140,6 +148,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   activeContextualHint: 'Tip: Traffic will increase steadily. Monitor App Server CPU and Database Connections.',
   activeIncident: null,
   autoPauseOnEdit: true,
+  architectureAssessment: null,
+  isAnalysisModalOpen: false,
   isToolboxOpen: true,
   isToolboxRail: false,
   isTelemetryOpen: true,
@@ -215,10 +225,42 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
       },
       (postmortem: PostmortemReport) => {
+        // Enrich postmortem with detected architectural issues
+        const currentGraph = useArchitectureStore.getState().getArchitectureGraph();
+        const validation = validateArchitecture(
+          currentGraph,
+          get().componentMetrics,
+          get().systemMetrics.incomingRps,
+          get().difficulty,
+          get().systemMetrics.stage
+        );
+        const errorIssues = validation.issues.filter((i) => i.severity === 'error');
+        const warnIssues = validation.issues.filter((i) => i.severity === 'warning');
+
+        if (errorIssues.length > 0 || warnIssues.length > 0) {
+          const architecturalRecommendations = [
+            ...errorIssues.map((i) => ({
+              title: i.title,
+              explanation: i.explanation || i.message,
+              architecturalFix: i.suggestedApproaches[0]?.description || 'Review connection and component topology.',
+            })),
+            ...warnIssues.map((i) => ({
+              title: i.title,
+              explanation: i.explanation || i.message,
+              architecturalFix: i.suggestedApproaches[0]?.description || 'Scale tier or add redundancy.',
+            })),
+          ];
+          postmortem.recommendations = [
+            ...(postmortem.recommendations || []),
+            ...architecturalRecommendations,
+          ];
+        }
+
         set({
           gameStatus: 'game_over',
           postmortem,
           showPostmortem: true,
+          architectureAssessment: validation.assessment,
         });
       },
       (milestone: string) => {
@@ -364,6 +406,35 @@ export const useGameStore = create<GameState>((set, get) => ({
   updateNodeConfigInGame: (nodeId: string, newConfig: any) => {
     useArchitectureStore.getState().updateNodeConfig(nodeId, newConfig);
     get().bridge?.updateNodeConfig(nodeId, newConfig);
+  },
+
+  openAnalysisModal: () => {
+    get().runArchitectureAnalysis();
+    set({ isAnalysisModalOpen: true });
+  },
+
+  closeAnalysisModal: () => {
+    set({ isAnalysisModalOpen: false });
+  },
+
+  toggleAnalysisModal: () => {
+    if (get().isAnalysisModalOpen) {
+      set({ isAnalysisModalOpen: false });
+    } else {
+      get().runArchitectureAnalysis();
+      set({ isAnalysisModalOpen: true });
+    }
+  },
+
+  runArchitectureAnalysis: () => {
+    const graph = useArchitectureStore.getState().getArchitectureGraph();
+    const liveMetrics = get().componentMetrics;
+    const currentRps = get().systemMetrics.incomingRps || 50;
+    const difficulty = get().difficulty;
+    const currentStage = get().systemMetrics.stage || 1;
+    const res = validateArchitecture(graph, liveMetrics, currentRps, difficulty, currentStage);
+    set({ architectureAssessment: res.assessment });
+    return res.assessment;
   },
 }));
 

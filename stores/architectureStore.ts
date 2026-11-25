@@ -17,11 +17,18 @@ import {
 import { DEFAULT_CONFIGS } from '../packages/simulation/models/economics';
 import { STARTER_ARCHITECTURE } from '../packages/simulation/scenarios/starter';
 import { checkComponentLimit, getComponentCount } from '../packages/simulation/models/limits';
+import {
+  classifyConnection,
+  validateArchitecture,
+  ArchitectureValidationResult,
+} from '../packages/simulation/validation';
 
 export interface ArchitectureState {
   nodes: Node[];
   edges: Edge[];
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  validationResult: ArchitectureValidationResult | null;
 
   // React Flow handlers
   onNodesChange: OnNodesChange;
@@ -30,6 +37,7 @@ export interface ArchitectureState {
 
   // Architecture actions
   selectNode: (nodeId: string | null) => void;
+  selectEdge: (edgeId: string | null) => void;
   addNode: (type: ComponentType, position?: { x: number; y: number }, itemId?: string) => ArchitectureNode | null;
   addReadReplica: (primaryDbId?: string) => ArchitectureNode | null;
   removeNode: (nodeId: string) => void;
@@ -38,6 +46,7 @@ export interface ArchitectureState {
   setGraph: (graph: ArchitectureGraph) => void;
   resetToStarter: () => void;
   getArchitectureGraph: () => ArchitectureGraph;
+  validateCurrentGraph: () => ArchitectureValidationResult;
 }
 
 let onArchitectureEditCallback: (() => void) | null = null;
@@ -47,6 +56,8 @@ export function registerArchitectureEditListener(cb: () => void) {
 
 // Convert domain architecture graph into React Flow format
 function convertGraphToFlow(graph: ArchitectureGraph): { nodes: Node[]; edges: Edge[] } {
+  const nodeMap = new Map<string, ArchitectureNode>(graph.nodes.map((n) => [n.id, n]));
+
   const nodes: Node[] = graph.nodes.map((node) => ({
     id: node.id,
     type: node.type, // Maps to our custom node components
@@ -58,27 +69,39 @@ function convertGraphToFlow(graph: ArchitectureGraph): { nodes: Node[]; edges: E
     },
   }));
 
-  const edges: Edge[] = graph.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: 'animatedFlow',
-    animated: true,
-    data: {
-      label: edge.label,
-    },
-  }));
+  const edges: Edge[] = graph.edges.map((edge) => {
+    const sNode = nodeMap.get(edge.source);
+    const tNode = nodeMap.get(edge.target);
+    const classification = sNode && tNode ? classifyConnection(sNode, tNode) : null;
+
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: 'animatedFlow',
+      animated: true,
+      data: {
+        label: edge.label || classification?.label || 'Connected',
+        edgeType: edge.edgeType || classification?.edgeType || 'http_traffic',
+        isValid: classification ? classification.isValid : true,
+        issue: classification?.issue,
+      },
+    };
+  });
 
   return { nodes, edges };
 }
 
 export const useArchitectureStore = create<ArchitectureState>((set, get) => {
   const initialFlow = convertGraphToFlow(STARTER_ARCHITECTURE);
+  const initialValidation = validateArchitecture(STARTER_ARCHITECTURE);
 
   return {
     nodes: initialFlow.nodes,
     edges: initialFlow.edges,
     selectedNodeId: null,
+    selectedEdgeId: null,
+    validationResult: initialValidation,
 
     onNodesChange: (changes: any) => {
       set({
@@ -94,19 +117,52 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
 
     onConnect: (connection) => {
       if (!connection.source || !connection.target) return;
+      const { nodes, edges } = get();
+      const sNode = nodes.find((n) => n.id === connection.source);
+      const tNode = nodes.find((n) => n.id === connection.target);
+
+      let classification: any = null;
+      if (sNode && tNode) {
+        const sourceArchNode: ArchitectureNode = {
+          id: sNode.id,
+          type: (sNode.type || sNode.data?.type) as ComponentType,
+          label: (sNode.data?.label as string) || sNode.id,
+          config: sNode.data?.config as any,
+        };
+        const targetArchNode: ArchitectureNode = {
+          id: tNode.id,
+          type: (tNode.type || tNode.data?.type) as ComponentType,
+          label: (tNode.data?.label as string) || tNode.id,
+          config: tNode.data?.config as any,
+        };
+        classification = classifyConnection(sourceArchNode, targetArchNode);
+      }
+
       const newEdge: Edge = {
         ...connection,
         id: `e-${connection.source}-${connection.target}-${Date.now()}`,
         type: 'animatedFlow',
         animated: true,
+        data: {
+          label: classification?.label || 'Connected',
+          edgeType: classification?.edgeType || 'http_traffic',
+          isValid: classification ? classification.isValid : true,
+          issue: classification?.issue,
+        },
       };
+
       set({
-        edges: addEdge(newEdge, get().edges),
+        edges: addEdge(newEdge, edges),
       });
+      get().validateCurrentGraph();
     },
 
     selectNode: (nodeId) => {
-      set({ selectedNodeId: nodeId });
+      set({ selectedNodeId: nodeId, selectedEdgeId: null });
+    },
+
+    selectEdge: (edgeId) => {
+      set({ selectedEdgeId: edgeId, selectedNodeId: null });
     },
 
     addNode: (type, position, itemId) => {
@@ -310,6 +366,7 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
       }));
 
       onArchitectureEditCallback?.();
+      get().validateCurrentGraph();
       return archNode;
     },
 
@@ -320,13 +377,16 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
         selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
       }));
+      get().validateCurrentGraph();
     },
 
     removeEdge: (edgeId) => {
       onArchitectureEditCallback?.();
       set((state) => ({
         edges: state.edges.filter((e) => e.id !== edgeId),
+        selectedEdgeId: state.selectedEdgeId === edgeId ? null : state.selectedEdgeId,
       }));
+      get().validateCurrentGraph();
     },
 
     updateNodeConfig: (nodeId, newConfig) => {
@@ -344,16 +404,19 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
           return node;
         }),
       }));
+      get().validateCurrentGraph();
     },
 
     setGraph: (graph) => {
       const flow = convertGraphToFlow(graph);
       set({ nodes: flow.nodes, edges: flow.edges });
+      get().validateCurrentGraph();
     },
 
     resetToStarter: () => {
       const flow = convertGraphToFlow(STARTER_ARCHITECTURE);
-      set({ nodes: flow.nodes, edges: flow.edges, selectedNodeId: null });
+      set({ nodes: flow.nodes, edges: flow.edges, selectedNodeId: null, selectedEdgeId: null });
+      get().validateCurrentGraph();
     },
 
     getArchitectureGraph: () => {
@@ -371,9 +434,17 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         source: e.source,
         target: e.target,
         label: e.data?.label as string,
+        edgeType: (e.data?.edgeType as any) || 'http_traffic',
       }));
 
       return { nodes: archNodes, edges: archEdges };
+    },
+
+    validateCurrentGraph: () => {
+      const graph = get().getArchitectureGraph();
+      const valRes = validateArchitecture(graph);
+      set({ validationResult: valRes });
+      return valRes;
     },
   };
 });

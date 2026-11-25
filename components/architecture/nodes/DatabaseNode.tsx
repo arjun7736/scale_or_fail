@@ -6,6 +6,7 @@ import { Database, Activity, KeyRound, Settings, Zap } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { DatabaseNodeConfig } from '@/packages/simulation/core/types';
+import { NodeValidationBadge } from './NodeValidationBadge';
 
 export function DatabaseNode({ id, data }: NodeProps) {
   const metrics = useGameStore((s) => s.componentMetrics[id]);
@@ -41,6 +42,7 @@ export function DatabaseNode({ id, data }: NodeProps) {
       onClick={() => selectNode(id)}
       className={`relative rounded-xl border bg-slate-900/95 p-3.5 shadow-xl backdrop-blur-md min-w-[210px] cursor-pointer transition-all hover:border-slate-600 ${borderColor}`}
     >
+      <NodeValidationBadge nodeId={id} />
       <Handle
         type="target"
         position={Position.Left}

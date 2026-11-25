@@ -6,6 +6,7 @@ import { Split, Settings } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { LoadBalancerNodeConfig } from '@/packages/simulation/core/types';
+import { NodeValidationBadge } from './NodeValidationBadge';
 
 export function LoadBalancerNode({ id, data }: NodeProps) {
   const metrics = useGameStore((s) => s.componentMetrics[id]);
@@ -23,6 +24,7 @@ export function LoadBalancerNode({ id, data }: NodeProps) {
         isSelected ? 'border-amber-400 shadow-amber-950/30' : 'border-slate-800'
       }`}
     >
+      <NodeValidationBadge nodeId={id} />
       <Handle
         type="target"
         position={Position.Left}

@@ -6,6 +6,7 @@ import { Server, Cpu, HardDrive, Settings, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { AppServerNodeConfig } from '@/packages/simulation/core/types';
+import { NodeValidationBadge } from './NodeValidationBadge';
 
 export function ServerNode({ id, data }: NodeProps) {
   const metrics = useGameStore((s) => s.componentMetrics[id]);
@@ -41,6 +42,7 @@ export function ServerNode({ id, data }: NodeProps) {
       className={`relative rounded-xl border bg-slate-900/95 p-3.5 shadow-xl backdrop-blur-md min-w-[210px] cursor-pointer transition-all hover:border-slate-600 ${borderColor}`}
     >
       {/* Target handle on Left */}
+      <NodeValidationBadge nodeId={id} />
       <Handle
         type="target"
         position={Position.Left}

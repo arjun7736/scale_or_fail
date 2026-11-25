@@ -146,11 +146,78 @@ export interface ArchitectureNode<T extends ComponentType = ComponentType> {
   position?: { x: number; y: number };
 }
 
+export type SemanticEdgeType =
+  | 'http_traffic'      // HTTP Request Flow (Client -> LB/App, LB -> App)
+  | 'edge_traffic'      // Edge Ingress (Client -> Anycast/CDN/RateLimiter/L4)
+  | 'cache_access'      // Cache Access (App Server -> Redis Cache)
+  | 'db_read_write'     // Database Read/Write (App Server -> PostgreSQL Primary)
+  | 'db_read'           // Database Read (App Server -> PostgreSQL Read Replica)
+  | 'replication'       // Asynchronous Replication (Primary DB -> Read Replica)
+  | 'async_message'     // Asynchronous Message Flow (App Server -> Message Queue / Kafka)
+  | 'stream_processing' // Stream Processing (Queue / Kafka -> Worker/App)
+  | 'unsupported';      // Unsupported or invalid connection
+
 export interface ArchitectureEdge {
   id: string;
   source: string;
   target: string;
   label?: string;
+  edgeType?: SemanticEdgeType;
+}
+
+export type ValidationSeverity = 'error' | 'warning' | 'info';
+export type ValidationCategory = 'invalid' | 'inefficient' | 'reliability_risk';
+
+export interface ArchitectureIssue {
+  id: string;
+  ruleId: string;
+  title: string;
+  category: ValidationCategory;
+  severity: ValidationSeverity;
+  message: string; // concise summary
+  explanation: string; // why it's wrong / what's occurring
+  consequence: string; // what happens during gameplay / under load
+  suggestedApproaches: {
+    title: string;
+    description: string;
+    tradeOffs?: string;
+  }[];
+  learningConcept: string; // real-world system design principle
+  relatedNodeIds?: string[];
+  relatedEdgeIds?: string[];
+  difficultyDetails?: {
+    beginnerHint?: string;
+    intermediateGuidance?: string;
+    expertMonitoringMetric?: string;
+  };
+  docLinks?: { title: string; url?: string }[];
+}
+
+export interface DimensionAssessment {
+  score: number; // 0 to 100
+  weight: number; // 0 to 1
+  rating: 'exceptional' | 'good' | 'adequate' | 'concerning' | 'critical';
+  summary: string;
+  feedback?: string;
+  strengths: string[];
+  vulnerabilities: string[];
+}
+
+export interface ArchitectureAssessment {
+  overallScore: number; // 0 to 100
+  letterGrade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+  isWorkloadSatisfied: boolean;
+  dimensions: {
+    routingCorrectness: DimensionAssessment;
+    performanceEfficiency: DimensionAssessment;
+    scalability: DimensionAssessment;
+    reliability: DimensionAssessment;
+    costEfficiency: DimensionAssessment;
+  };
+  topIssues: ArchitectureIssue[];
+  learningSummary: string;
+  summary?: string;
+  keyConcepts?: string[];
 }
 
 export interface ArchitectureGraph {

@@ -16,6 +16,7 @@ import {
 } from '../models/capacity';
 import { calculateQueueingMetrics } from '../models/queueing';
 import { validateArchitectureGraph } from './graph-validator';
+import { classifyConnection } from '../validation';
 
 export interface RouteResult {
   systemMetricsPartial: Partial<SystemMetrics>;
@@ -101,6 +102,20 @@ export function routeTrafficThroughGraph(
     incomingEdges.set(node.id, []);
   }
   for (const edge of graph.edges) {
+    const sNode = nodeMap.get(edge.source);
+    const tNode = nodeMap.get(edge.target);
+    if (!sNode || !tNode) continue;
+
+    const classification = classifyConnection(sNode, tNode);
+    if (!classification.isValid) {
+      // Exclude unsupported edge from active request routing
+      if (edgeMetrics[edge.id]) {
+        edgeMetrics[edge.id].status = 'critical';
+        edgeMetrics[edge.id].throughputRps = 0;
+      }
+      continue;
+    }
+
     outgoingEdges.get(edge.source)?.push(edge);
     incomingEdges.get(edge.target)?.push(edge);
   }
@@ -433,11 +448,14 @@ export function routeTrafficThroughGraph(
     const shardedDbs = shardingRouters.flatMap((sr) =>
       (outgoingEdges.get(sr.id) || []).map((e) => nodeMap.get(e.target)!).filter((n) => n && n.type === 'database')
     );
-    // Also check if Caches connected to S connect to Databases or Sharding Routers
-    const cacheDbs = connectedCaches.flatMap((c) =>
-      (outgoingEdges.get(c.id) || []).map((e) => nodeMap.get(e.target)!).filter((n) => n && (n.type === 'database' || n.type === 'db_sharding' || n.type === 'distributed_nosql'))
-    );
-    const allConnectedDbs = Array.from(new Set([...directDbs, ...cacheDbs, ...shardedDbs]));
+    // Primary DB may have Read Replicas connected via replication edges
+    const primaryDb = directDbs.find((d) => (d.config as any)?.role === 'primary');
+    const replicatedDbs = primaryDb
+      ? (outgoingEdges.get(primaryDb.id) || [])
+          .map((e) => nodeMap.get(e.target)!)
+          .filter((n) => n && n.type === 'database' && (n.config as any)?.role === 'replica')
+      : [];
+    const allConnectedDbs = Array.from(new Set([...directDbs, ...replicatedDbs, ...shardedDbs]));
 
     const isStorageDisconnected = allConnectedDbs.length === 0 && connectedCaches.length === 0;
 
@@ -591,6 +609,14 @@ export function routeTrafficThroughGraph(
       dbThreadDemandMap.set(primaryDb.id, (dbThreadDemandMap.get(primaryDb.id) || 0) + 15);
       const writeSource = shardingRouter ? shardingRouter.id : ctx.server.id;
       recordEdgeFlow(writeSource, primaryDb.id, netWrites, 12, 'healthy');
+
+      // Record WAL replication stream to attached read replicas
+      const replicaTargets = (outgoingEdges.get(primaryDb.id) || [])
+        .map((e) => nodeMap.get(e.target)!)
+        .filter((n) => n && n.type === 'database' && (n.config as any)?.role === 'replica');
+      for (const rDb of replicaTargets) {
+        recordEdgeFlow(primaryDb.id, rDb.id, netWrites, 5, 'healthy');
+      }
     }
 
     // Direct reads (reads not absorbed by Redis)
@@ -671,12 +697,16 @@ export function routeTrafficThroughGraph(
     if (ctx.isStorageDisconnected) {
       serversDisconnectedCount++;
       componentMetrics[server.id].health = 'critical';
-      componentMetrics[server.id].statusMessage = 'Disconnected: No Database or Cache connected!';
+      componentMetrics[server.id].statusMessage =
+        'Your application cannot complete database-dependent requests because no reachable database is configured.';
       componentMetrics[server.id].throughputInRps = ctx.serverRps;
       componentMetrics[server.id].throughputOutRps = 0;
       componentMetrics[server.id].droppedRps = ctx.serverRps;
       continue;
     }
+
+    const hasDb = ctx.connectedDbs.length > 0;
+    const isDbMissingForCacheOnly = !hasDb && ctx.connectedCaches.length > 0;
 
     const redisLatency = ctx.connectedCaches.length > 0 ? 1.5 : 0;
     const serverResult = calculateAppServerCapacity(sConfig, ctx.serverRps, maxDbLatencyMs + redisLatency);

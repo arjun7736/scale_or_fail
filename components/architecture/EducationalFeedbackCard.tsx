@@ -99,7 +99,7 @@ export function EducationalFeedbackCard({
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] text-teal-300 font-mono">
           <BookOpen className="h-3 w-3 text-teal-400 shrink-0" />
           <span className="font-semibold text-slate-400">Concept:</span>
-          <span className="truncate">{issue.learningConcept}</span>
+          <span className="leading-tight break-words">{issue.learningConcept}</span>
         </div>
       )}
 

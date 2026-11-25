@@ -343,9 +343,24 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         },
       };
 
-      // Connect incoming edges from nodes that feed into the primary DB (e.g. app servers)
+      // Connect replication and incoming read query edges
       const newEdges: Edge[] = [];
       if (primaryNode) {
+        // 1. Establish WAL Replication Stream from Primary DB to Read Replica
+        newEdges.push({
+          id: `e-repl-${primaryNode.id}-${id}-${Date.now().toString(36).slice(-4)}`,
+          source: primaryNode.id,
+          target: id,
+          type: 'animatedFlow',
+          animated: true,
+          data: {
+            label: 'Replication (WAL)',
+            edgeType: 'replication',
+            isValid: true,
+          },
+        });
+
+        // 2. Connect incoming read traffic from upstream App Servers
         const incomingEdges = edges.filter((e) => e.target === primaryNode!.id);
         incomingEdges.forEach((incEdge) => {
           newEdges.push({
@@ -354,7 +369,11 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
             target: id,
             type: 'animatedFlow',
             animated: true,
-            data: { label: 'read traffic' },
+            data: {
+              label: 'Database Read (Replica)',
+              edgeType: 'db_read',
+              isValid: true,
+            },
           });
         });
       }

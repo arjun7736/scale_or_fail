@@ -112,11 +112,26 @@ export function DatabaseNode({ id, data }: NodeProps) {
           </div>
         </div>
 
-        <div className="flex justify-between pt-0.5 text-slate-400 border-t border-slate-900 text-[9px]">
+        <div className="flex justify-between items-center pt-0.5 text-slate-400 border-t border-slate-900 text-[9px]">
           <span>Latency:</span>
           <span className="text-slate-200">~{metrics?.avgLatencyMs || 15}ms</span>
+          {isPrimary && (
+            <span className="text-amber-400 font-mono text-[8.5px] font-semibold flex items-center gap-0.5" title="Replication Source (WAL)">
+              WAL Out →
+            </span>
+          )}
         </div>
       </div>
+
+      {/* WAL Replication Source Handle on Primary Database */}
+      {isPrimary && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-slate-900 !bg-amber-400 hover:scale-125 transition-transform"
+          title="WAL Replication Source → Drag connection to Read Replica"
+        />
+      )}
     </div>
   );
 }

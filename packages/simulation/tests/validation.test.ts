@@ -308,4 +308,36 @@ describe('Intelligent Architecture Validation & Educational Feedback System', ()
     expect(routeRes.componentMetrics['app-1'].health).toBe('healthy');
     expect(routeRes.componentMetrics['db-primary'].health).toBe('healthy');
   });
+
+  // Scenario 16: Establishing WAL Replication to Read Replicas
+  it('16. should correctly classify Primary-to-Replica as replication edge and support multiple replicas', () => {
+    const primary: ArchitectureNode = {
+      id: 'db-primary',
+      type: 'database',
+      label: 'PostgreSQL Primary',
+      config: DEFAULT_CONFIGS.database('primary', 'medium'),
+    };
+    const replica: ArchitectureNode = {
+      id: 'db-replica-1',
+      type: 'database',
+      label: 'Read Replica 1',
+      config: DEFAULT_CONFIGS.database('replica', 'medium'),
+    };
+
+    const replConn = classifyConnection(primary, replica);
+    expect(replConn.isValid).toBe(true);
+    expect(replConn.edgeType).toBe('replication');
+    expect(replConn.label).toContain('Replication');
+
+    // App server read connection to replica
+    const app: ArchitectureNode = {
+      id: 'app-1',
+      type: 'app_server',
+      label: 'App Server',
+      config: DEFAULT_CONFIGS.app_server('small'),
+    };
+    const readConn = classifyConnection(app, replica);
+    expect(readConn.isValid).toBe(true);
+    expect(readConn.edgeType).toBe('db_read');
+  });
 });

@@ -75,12 +75,6 @@ export function CacheNode({ id, data }: NodeProps) {
           <span className="text-rose-300">~1ms</span>
         </div>
       </div>
-
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!h-3 !w-3 !rounded-full !border-2 !border-slate-900 !bg-rose-400"
-      />
     </div>
   );
 }

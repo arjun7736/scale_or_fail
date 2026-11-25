@@ -75,6 +75,7 @@ function CanvasInternal() {
     (event: React.DragEvent) => {
       event.preventDefault();
       const type = event.dataTransfer.getData('application/scale-or-fail-type') as ComponentType;
+      const itemId = event.dataTransfer.getData('application/scale-or-fail-id') || type;
       if (!type) return;
 
       const position = screenToFlowPosition({
@@ -82,8 +83,10 @@ function CanvasInternal() {
         y: event.clientY,
       });
 
-      addNode(type, position);
-      setTimeout(() => syncGraph(), 50);
+      const added = addNode(type, position, itemId);
+      if (added) {
+        setTimeout(() => syncGraph(), 50);
+      }
     },
     [screenToFlowPosition, addNode, syncGraph]
   );

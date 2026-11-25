@@ -64,6 +64,47 @@ export function validateArchitectureGraph(graph: ArchitectureGraph): ValidationR
     });
   }
 
+  // Check for duplicate singleton components (violates 1-per-tier system design rule)
+  const counts: Record<string, number> = {};
+  for (const node of graph.nodes) {
+    counts[node.type] = (counts[node.type] || 0) + 1;
+  }
+  const SINGLETON_TYPES: ComponentType[] = [
+    'client',
+    'load_balancer',
+    'redis_cache',
+    'cdn',
+    'rate_limiter',
+    'message_queue',
+    'db_sharding',
+    'kafka_stream',
+    'anycast_edge',
+    'circuit_breaker',
+    'l4_maglev',
+    'distributed_nosql',
+  ];
+  for (const st of SINGLETON_TYPES) {
+    if (counts[st] > 1) {
+      issues.push({
+        type: 'warning',
+        code: 'DUPLICATE_SINGLETON',
+        message: `Multiple ${st.replace('_', ' ')} components detected (${counts[st]}). System design best practices require at most 1 instance for this tier.`,
+      });
+    }
+  }
+
+  // Check for multiple primary databases
+  const primaryDbs = graph.nodes.filter(
+    (n) => n.type === 'database' && (n.config as any)?.role !== 'replica'
+  );
+  if (primaryDbs.length > 1) {
+    issues.push({
+      type: 'error',
+      code: 'MULTIPLE_PRIMARY_DATABASES',
+      message: 'Multiple Primary Databases detected. Relational SQL topologies only support 1 Primary Write Master. Use Read Replicas instead.',
+    });
+  }
+
   // Check edge validity
   const adjacency = new Map<string, string[]>();
   for (const node of graph.nodes) {

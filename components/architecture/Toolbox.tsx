@@ -24,11 +24,13 @@ import {
   LayoutList,
   Columns,
   X,
-  Smartphone,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import { ComponentType } from '@/packages/simulation/core/types';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { useGameStore } from '@/stores/gameStore';
+import { checkComponentLimit, getComponentCount } from '@/packages/simulation/models/limits';
 
 interface ToolboxItem {
   id: string;
@@ -248,12 +250,14 @@ export function Toolbox() {
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [lastAddedTitle, setLastAddedTitle] = useState<string | null>(null);
+  const [limitWarning, setLimitWarning] = useState<string | null>(null);
 
   const isToolboxOpen = useGameStore((s) => s.isToolboxOpen);
   const isToolboxRail = useGameStore((s) => s.isToolboxRail);
   const toggleToolbox = useGameStore((s) => s.toggleToolbox);
   const toggleToolboxRail = useGameStore((s) => s.toggleToolboxRail);
 
+  const nodes = useArchitectureStore((s) => s.nodes);
   const addNode = useArchitectureStore((s) => s.addNode);
   const syncGraph = useGameStore((s) => s.syncGraph);
   const currentStage = useGameStore((s) => s.systemMetrics.stage || 1);
@@ -266,19 +270,36 @@ export function Toolbox() {
       e.preventDefault();
       return;
     }
+    const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+    if (!limitCheck.allowed) {
+      e.preventDefault();
+      setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
+      setTimeout(() => setLimitWarning(null), 3500);
+      return;
+    }
     e.dataTransfer.setData('application/scale-or-fail-type', item.type);
+    e.dataTransfer.setData('application/scale-or-fail-id', item.id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleQuickAdd = (item: ToolboxItem) => {
     if (currentStage < item.unlockStage) return;
+
+    const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+    if (!limitCheck.allowed) {
+      setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
+      setTimeout(() => setLimitWarning(null), 3500);
+      return;
+    }
+
     // Calculate a slightly randomized center offset for mobile / click deploy
     const offset = (Math.random() - 0.5) * 60;
-    addNode(item.type, { x: 260 + offset, y: 160 + offset });
-    setTimeout(() => syncGraph(), 50);
-
-    setLastAddedTitle(item.title);
-    setTimeout(() => setLastAddedTitle(null), 2000);
+    const added = addNode(item.type, { x: 260 + offset, y: 160 + offset }, item.id);
+    if (added) {
+      setTimeout(() => syncGraph(), 50);
+      setLastAddedTitle(item.title);
+      setTimeout(() => setLastAddedTitle(null), 2000);
+    }
   };
 
   const unlockedCount = TOOLBOX_ITEMS.filter((i) => currentStage >= i.unlockStage).length;
@@ -322,23 +343,49 @@ export function Toolbox() {
           <div className="flex-1 overflow-y-auto overflow-x-hidden w-full flex flex-col items-center space-y-2 px-1">
             {TOOLBOX_ITEMS.map((item) => {
               const isLocked = currentStage < item.unlockStage;
+              const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+              const isLimitReached = !limitCheck.allowed;
+              const isDisabled = isLocked || isLimitReached;
+
               return (
                 <button
                   key={item.id}
-                  draggable={!isLocked}
+                  draggable={!isDisabled}
                   onDragStart={(e) => handleDragStart(e, item)}
                   onClick={() => handleQuickAdd(item)}
                   className={`relative group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                    isLocked
+                    isDisabled
                       ? 'border-slate-800/60 bg-slate-950/40 text-slate-600 cursor-not-allowed'
                       : `${item.iconBg} ${item.iconColor} hover:scale-105 active:scale-95 cursor-pointer`
                   }`}
-                  title={`${item.title} (${item.costPerHour})${isLocked ? ` • Locked until Stage ${item.unlockStage}` : ' • Tap or drag to deploy'}`}
+                  title={`${item.title} (${item.costPerHour})${
+                    isLocked
+                      ? ` • Locked until Stage ${item.unlockStage}`
+                      : isLimitReached
+                      ? ' • In Use (Single Instance Limit: 1)'
+                      : ' • Tap or drag to deploy'
+                  }`}
                 >
-                  {isLocked ? <Lock className="h-3.5 w-3.5" /> : item.icon}
+                  {isLocked ? (
+                    <Lock className="h-3.5 w-3.5" />
+                  ) : isLimitReached ? (
+                    item.icon
+                  ) : (
+                    item.icon
+                  )}
+
                   {isLocked && (
                     <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40 text-[8px] font-mono text-amber-300">
                       {item.unlockStage}
+                    </span>
+                  )}
+
+                  {!isLocked && isLimitReached && (
+                    <span
+                      className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-teal-500/20 border border-teal-500/40 text-[8px] font-mono text-teal-300"
+                      title="Already deployed in topology (Limit: 1)"
+                    >
+                      ✓
                     </span>
                   )}
                 </button>
@@ -351,7 +398,7 @@ export function Toolbox() {
           </div>
         </div>
       ) : (
-        /* FULL COMPACT DRAWER MODE (Fixed overlay on mobile, inline on desktop) */
+        /* FULL COMPACT DRAWER MODE */
         <div className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto flex flex-col h-full bg-slate-900/98 md:bg-slate-900/95 border-r border-slate-800/80 w-72 max-w-[85vw] select-none shrink-0 shadow-2xl md:shadow-none animate-in slide-in-from-left duration-200">
           {/* Header */}
           <div className="p-2.5 border-b border-slate-800 space-y-2">
@@ -389,8 +436,16 @@ export function Toolbox() {
               <span className="text-slate-400 text-[9px]">Tap X to exit</span>
             </div>
 
-            {/* Feedback alert when component is deployed */}
-            {lastAddedTitle && (
+            {/* Limit Warning Alert */}
+            {limitWarning && (
+              <div className="px-2 py-1.5 rounded bg-amber-500/15 border border-amber-500/40 text-[10px] text-amber-300 font-mono animate-in fade-in flex items-start gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" />
+                <span className="leading-tight">{limitWarning}</span>
+              </div>
+            )}
+
+            {/* Success feedback when component is deployed */}
+            {lastAddedTitle && !limitWarning && (
               <div className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono animate-in fade-in">
                 ✓ Deployed {lastAddedTitle} to canvas!
               </div>
@@ -443,21 +498,27 @@ export function Toolbox() {
             </div>
           </div>
 
-          {/* Component Cards List - Tap or Drag to Add */}
+          {/* Component Cards List */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
             {filteredItems.map((item) => {
               const isLocked = currentStage < item.unlockStage;
               const isNewlyUnlocked = currentStage === item.unlockStage;
+              const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+              const isLimitReached = !limitCheck.allowed;
+              const isMulti = item.id === 'app_server' || item.id === 'db_replica';
+              const isDisabled = isLocked || isLimitReached;
 
               return (
                 <div
                   key={item.id}
-                  draggable={!isLocked}
+                  draggable={!isDisabled}
                   onDragStart={(e) => handleDragStart(e, item)}
                   onClick={() => handleQuickAdd(item)}
                   className={`group relative rounded-lg border p-2 transition-all select-none ${
                     isLocked
                       ? 'border-slate-800/40 bg-slate-950/20 opacity-60 hover:opacity-75 cursor-not-allowed'
+                      : isLimitReached
+                      ? 'border-slate-800/50 bg-slate-950/40 opacity-75 hover:border-slate-700 cursor-not-allowed'
                       : 'border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/30 active:scale-[0.98] cursor-pointer shadow-xs'
                   }`}
                 >
@@ -465,16 +526,30 @@ export function Toolbox() {
                     <div className="flex items-center gap-2 min-w-0">
                       <div
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
-                          isLocked ? 'border-slate-800 bg-slate-900 text-slate-500' : `${item.iconBg} ${item.iconColor}`
+                          isLocked
+                            ? 'border-slate-800 bg-slate-900 text-slate-500'
+                            : isLimitReached
+                            ? 'border-slate-800 bg-slate-900/80 text-slate-400'
+                            : `${item.iconBg} ${item.iconColor}`
                         }`}
                       >
-                        {isLocked ? <Lock className="h-3 w-3" /> : item.icon}
+                        {isLocked ? (
+                          <Lock className="h-3 w-3" />
+                        ) : isLimitReached ? (
+                          item.icon
+                        ) : (
+                          item.icon
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1">
                           <span
                             className={`text-[11px] font-semibold truncate ${
-                              isLocked ? 'text-slate-400' : 'text-slate-200 group-hover:text-white'
+                              isLocked
+                                ? 'text-slate-400'
+                                : isLimitReached
+                                ? 'text-slate-300'
+                                : 'text-slate-200 group-hover:text-white'
                             }`}
                           >
                             {item.title}
@@ -491,27 +566,48 @@ export function Toolbox() {
                       </div>
                     </div>
 
-                    {!isLocked ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleQuickAdd(item);
-                        }}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-800 hover:bg-teal-500/20 hover:text-teal-400 text-slate-300"
-                        title="Deploy to canvas"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    ) : (
+                    {isLocked ? (
                       <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-400/90 shrink-0">
                         Stage {item.unlockStage}
                       </span>
+                    ) : isLimitReached ? (
+                      <span
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-teal-400/90 flex items-center gap-1 shrink-0"
+                        title={limitCheck.reason}
+                      >
+                        <Check className="h-2.5 w-2.5 text-teal-400" /> In Use (1/1)
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isMulti && limitCheck.currentCount > 0 && (
+                          <span className="text-[9px] font-mono text-teal-400/80">
+                            {limitCheck.currentCount} active
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuickAdd(item);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded bg-slate-800 hover:bg-teal-500/20 hover:text-teal-400 text-slate-300 transition-colors"
+                          title="Deploy to canvas"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
                   <p className="mt-1 text-[10px] text-slate-400 line-clamp-1 group-hover:line-clamp-none transition-all">
                     {item.description}
                   </p>
+
+                  {/* Limit Hint Chip if component is single-instance and in use */}
+                  {!isLocked && isLimitReached && (
+                    <div className="mt-1 text-[9px] font-mono text-slate-500 flex items-center gap-1">
+                      <span>🔒 Limit: 1 per architecture. Remove to redeploy.</span>
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -16,6 +16,7 @@ import {
 } from '../packages/simulation/core/types';
 import { DEFAULT_CONFIGS } from '../packages/simulation/models/economics';
 import { STARTER_ARCHITECTURE } from '../packages/simulation/scenarios/starter';
+import { checkComponentLimit, getComponentCount } from '../packages/simulation/models/limits';
 
 export interface ArchitectureState {
   nodes: Node[];
@@ -29,7 +30,7 @@ export interface ArchitectureState {
 
   // Architecture actions
   selectNode: (nodeId: string | null) => void;
-  addNode: (type: ComponentType, position?: { x: number; y: number }) => ArchitectureNode;
+  addNode: (type: ComponentType, position?: { x: number; y: number }, itemId?: string) => ArchitectureNode | null;
   removeNode: (nodeId: string) => void;
   removeEdge: (edgeId: string) => void;
   updateNodeConfig: (nodeId: string, newConfig: Partial<ArchitectureNode['config']>) => void;
@@ -107,7 +108,20 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
       set({ selectedNodeId: nodeId });
     },
 
-    addNode: (type, position) => {
+    addNode: (type, position, itemId) => {
+      const targetItemId = itemId || type;
+      const currentNodes = get().nodes.map((n) => ({
+        type: (n.type || n.data?.type) as ComponentType,
+        config: n.data?.config,
+        data: n.data,
+      }));
+
+      const limitCheck = checkComponentLimit(currentNodes, targetItemId, type);
+      if (!limitCheck.allowed) {
+        console.warn(`[Limit Rule] Cannot add ${targetItemId}: ${limitCheck.reason}`);
+        return null;
+      }
+
       const id = `${type}-${Date.now().toString(36).slice(-4)}`;
       let config: any;
       let label = type.replace('_', ' ').toUpperCase();
@@ -122,8 +136,13 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
           label = 'App Server';
           break;
         case 'database':
-          config = DEFAULT_CONFIGS.database('replica', 'small');
-          label = 'Read Replica';
+          if (targetItemId === 'database') {
+            config = DEFAULT_CONFIGS.database('primary', 'small');
+            label = 'PostgreSQL Primary';
+          } else {
+            config = DEFAULT_CONFIGS.database('replica', 'small');
+            label = 'Read Replica';
+          }
           break;
         case 'redis_cache':
           config = DEFAULT_CONFIGS.redis_cache();

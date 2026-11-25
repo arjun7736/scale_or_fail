@@ -64,9 +64,9 @@ const TOOLBOX_ITEMS: ToolboxItem[] = [
   {
     id: 'database',
     type: 'database',
-    title: 'PostgreSQL Primary DB',
+    title: 'PostgreSQL Database',
     category: 'Relational Storage',
-    description: 'Primary ACID write master (PostgreSQL/MySQL) for transactional mutations and state persistence.',
+    description: 'Primary ACID write master. Once deployed, scale read throughput with Read Replicas.',
     costPerHour: '$0.06 - $1.40/hr',
     unlockStage: 1,
     unlockStageName: 'Startup',
@@ -146,19 +146,6 @@ const TOOLBOX_ITEMS: ToolboxItem[] = [
     icon: <Layers className="h-4 w-4" />,
     iconBg: 'bg-indigo-500/10 border-indigo-500/20',
     iconColor: 'text-indigo-400',
-  },
-  {
-    id: 'db_replica',
-    type: 'database',
-    title: 'Read Replica DB (Aurora)',
-    category: 'Database Scaling',
-    description: 'Read-only SQL replicas (PostgreSQL/Aurora) horizontally scaling read throughput off the write master.',
-    costPerHour: '$0.06 - $1.40/hr',
-    unlockStage: 5,
-    unlockStageName: 'Flash Sale',
-    icon: <Boxes className="h-4 w-4" />,
-    iconBg: 'bg-violet-500/10 border-violet-500/20',
-    iconColor: 'text-violet-400',
   },
 
   // STAGE 6: Distributed Systems
@@ -270,34 +257,55 @@ export function Toolbox() {
       e.preventDefault();
       return;
     }
-    const limitCheck = checkComponentLimit(nodes, item.id, item.type);
-    if (!limitCheck.allowed) {
-      e.preventDefault();
-      setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
-      setTimeout(() => setLimitWarning(null), 3500);
-      return;
+    let transferId = item.id;
+    if (item.id === 'database') {
+      const primaryLimit = checkComponentLimit(nodes, 'database', 'database');
+      if (!primaryLimit.allowed) {
+        // Primary already deployed; automatically route drag to deploy Read Replica
+        transferId = 'db_replica';
+      }
+    } else {
+      const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+      if (!limitCheck.allowed) {
+        e.preventDefault();
+        setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
+        setTimeout(() => setLimitWarning(null), 3500);
+        return;
+      }
     }
     e.dataTransfer.setData('application/scale-or-fail-type', item.type);
-    e.dataTransfer.setData('application/scale-or-fail-id', item.id);
+    e.dataTransfer.setData('application/scale-or-fail-id', transferId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleQuickAdd = (item: ToolboxItem) => {
     if (currentStage < item.unlockStage) return;
 
-    const limitCheck = checkComponentLimit(nodes, item.id, item.type);
-    if (!limitCheck.allowed) {
-      setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
-      setTimeout(() => setLimitWarning(null), 3500);
-      return;
+    let targetItemId = item.id;
+    let targetTitle = item.title;
+
+    if (item.id === 'database') {
+      const primaryLimit = checkComponentLimit(nodes, 'database', 'database');
+      if (!primaryLimit.allowed) {
+        // Route to Read Replica
+        targetItemId = 'db_replica';
+        targetTitle = 'Read Replica DB';
+      }
+    } else {
+      const limitCheck = checkComponentLimit(nodes, item.id, item.type);
+      if (!limitCheck.allowed) {
+        setLimitWarning(limitCheck.reason || `Only 1 ${item.title} allowed in topology.`);
+        setTimeout(() => setLimitWarning(null), 3500);
+        return;
+      }
     }
 
     // Calculate a slightly randomized center offset for mobile / click deploy
     const offset = (Math.random() - 0.5) * 60;
-    const added = addNode(item.type, { x: 260 + offset, y: 160 + offset }, item.id);
+    const added = addNode(item.type, { x: 260 + offset, y: 160 + offset }, targetItemId);
     if (added) {
       setTimeout(() => syncGraph(), 50);
-      setLastAddedTitle(item.title);
+      setLastAddedTitle(targetTitle);
       setTimeout(() => setLastAddedTitle(null), 2000);
     }
   };
@@ -345,7 +353,11 @@ export function Toolbox() {
               const isLocked = currentStage < item.unlockStage;
               const limitCheck = checkComponentLimit(nodes, item.id, item.type);
               const isLimitReached = !limitCheck.allowed;
-              const isDisabled = isLocked || isLimitReached;
+              const isDatabaseWithPrimary = item.id === 'database' && isLimitReached;
+              const replicaCount = item.id === 'database' ? getComponentCount(nodes, 'db_replica', 'database') : 0;
+              const isReplicaLimitReached = replicaCount >= 8;
+              const isDisabled = isLocked || (isLimitReached && !isDatabaseWithPrimary) || (isDatabaseWithPrimary && isReplicaLimitReached);
+              const title = isDatabaseWithPrimary ? `PostgreSQL Read Replica (${replicaCount}/8)` : item.title;
 
               return (
                 <button
@@ -356,11 +368,15 @@ export function Toolbox() {
                   className={`relative group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
                     isDisabled
                       ? 'border-slate-800/60 bg-slate-950/40 text-slate-600 cursor-not-allowed'
+                      : isDatabaseWithPrimary
+                      ? 'border-purple-500/40 bg-purple-500/10 text-purple-400 hover:scale-105 active:scale-95 cursor-pointer'
                       : `${item.iconBg} ${item.iconColor} hover:scale-105 active:scale-95 cursor-pointer`
                   }`}
-                  title={`${item.title} (${item.costPerHour})${
+                  title={`${title} (${item.costPerHour})${
                     isLocked
                       ? ` • Locked until Stage ${item.unlockStage}`
+                      : isDatabaseWithPrimary
+                      ? ` • Primary active (1/1) - Tap/drag to deploy Read Replica (${replicaCount}/8)`
                       : isLimitReached
                       ? ' • In Use (Single Instance Limit: 1)'
                       : ' • Tap or drag to deploy'
@@ -505,8 +521,19 @@ export function Toolbox() {
               const isNewlyUnlocked = currentStage === item.unlockStage;
               const limitCheck = checkComponentLimit(nodes, item.id, item.type);
               const isLimitReached = !limitCheck.allowed;
-              const isMulti = item.id === 'app_server' || item.id === 'db_replica';
-              const isDisabled = isLocked || isLimitReached;
+              const isDatabaseWithPrimary = item.id === 'database' && isLimitReached;
+              const replicaCount = item.id === 'database' ? getComponentCount(nodes, 'db_replica', 'database') : 0;
+              const isReplicaLimitReached = replicaCount >= 8;
+              const isMulti = item.id === 'app_server';
+              const isDisabled = isLocked || (isLimitReached && !isDatabaseWithPrimary) || (isDatabaseWithPrimary && isReplicaLimitReached);
+
+              const title = isDatabaseWithPrimary ? 'PostgreSQL Read Replica' : item.title;
+              const category = isDatabaseWithPrimary
+                ? replicaCount > 0 ? `Read Replicas (${replicaCount}/8)` : 'Read Replica DB'
+                : item.category;
+              const description = isDatabaseWithPrimary
+                ? 'Read-only SQL replica offloading read queries from the Primary Write Master.'
+                : item.description;
 
               return (
                 <div
@@ -517,6 +544,8 @@ export function Toolbox() {
                   className={`group relative rounded-lg border p-2 transition-all select-none ${
                     isLocked
                       ? 'border-slate-800/40 bg-slate-950/20 opacity-60 hover:opacity-75 cursor-not-allowed'
+                      : isDatabaseWithPrimary
+                      ? 'border-purple-500/30 bg-purple-950/20 hover:border-purple-500/50 hover:bg-purple-950/30 cursor-pointer shadow-xs'
                       : isLimitReached
                       ? 'border-slate-800/50 bg-slate-950/40 opacity-75 hover:border-slate-700 cursor-not-allowed'
                       : 'border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/30 active:scale-[0.98] cursor-pointer shadow-xs'
@@ -528,6 +557,8 @@ export function Toolbox() {
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
                           isLocked
                             ? 'border-slate-800 bg-slate-900 text-slate-500'
+                            : isDatabaseWithPrimary
+                            ? 'border-purple-500/40 bg-purple-900/40 text-purple-300'
                             : isLimitReached
                             ? 'border-slate-800 bg-slate-900/80 text-slate-400'
                             : `${item.iconBg} ${item.iconColor}`
@@ -535,8 +566,6 @@ export function Toolbox() {
                       >
                         {isLocked ? (
                           <Lock className="h-3 w-3" />
-                        ) : isLimitReached ? (
-                          item.icon
                         ) : (
                           item.icon
                         )}
@@ -547,12 +576,14 @@ export function Toolbox() {
                             className={`text-[11px] font-semibold truncate ${
                               isLocked
                                 ? 'text-slate-400'
+                                : isDatabaseWithPrimary
+                                ? 'text-purple-200 group-hover:text-white'
                                 : isLimitReached
                                 ? 'text-slate-300'
                                 : 'text-slate-200 group-hover:text-white'
                             }`}
                           >
-                            {item.title}
+                            {title}
                           </span>
                           {isNewlyUnlocked && (
                             <span className="text-[8px] font-mono px-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
@@ -561,7 +592,7 @@ export function Toolbox() {
                           )}
                         </div>
                         <div className="text-[9px] text-slate-500 font-mono truncate">
-                          {item.costPerHour} • {item.category}
+                          {item.costPerHour} • {category}
                         </div>
                       </div>
                     </div>
@@ -570,6 +601,25 @@ export function Toolbox() {
                       <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-400/90 shrink-0">
                         Stage {item.unlockStage}
                       </span>
+                    ) : isDatabaseWithPrimary ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isReplicaLimitReached ? (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-teal-400">
+                            Max (8/8)
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAdd(item);
+                            }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-medium transition-colors shadow-xs"
+                            title="Deploy Read Replica"
+                          >
+                            <Plus className="h-3 w-3" /> Add Replica
+                          </button>
+                        )}
+                      </div>
                     ) : isLimitReached ? (
                       <span
                         className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-teal-400/90 flex items-center gap-1 shrink-0"
@@ -599,11 +649,16 @@ export function Toolbox() {
                   </div>
 
                   <p className="mt-1 text-[10px] text-slate-400 line-clamp-1 group-hover:line-clamp-none transition-all">
-                    {item.description}
+                    {description}
                   </p>
 
                   {/* Limit Hint Chip if component is single-instance and in use */}
-                  {!isLocked && isLimitReached && (
+                  {!isLocked && isDatabaseWithPrimary && (
+                    <div className="mt-1 text-[9px] font-mono text-purple-400/90 flex items-center justify-between">
+                      <span>✓ Primary active (1/1). Click or drag to add Read Replica ({replicaCount}/8).</span>
+                    </div>
+                  )}
+                  {!isLocked && isLimitReached && !isDatabaseWithPrimary && (
                     <div className="mt-1 text-[9px] font-mono text-slate-500 flex items-center gap-1">
                       <span>🔒 Limit: 1 per architecture. Remove to redeploy.</span>
                     </div>

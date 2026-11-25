@@ -64,6 +64,16 @@ export function NodeConfigDrawer() {
   const config = node.data?.config as any;
 
   const handleUpdate = (patch: any) => {
+    if (patch.role === 'primary') {
+      // Demote any other database to replica to prevent split-brain write conflicts
+      nodes.forEach((n) => {
+        const nType = n.type || n.data?.type;
+        if (nType === 'database' && n.id !== selectedNodeId && (n.data?.config as any)?.role === 'primary') {
+          updateNodeConfig(n.id, { role: 'replica' });
+          updateNodeConfigInGame(n.id, { role: 'replica' });
+        }
+      });
+    }
     updateNodeConfig(selectedNodeId, patch);
     updateNodeConfigInGame(selectedNodeId, patch);
     setTimeout(() => syncGraph(), 30);

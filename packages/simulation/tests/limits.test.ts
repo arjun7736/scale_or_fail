@@ -105,4 +105,32 @@ describe('Singleton & Component Limits System Design Rules', () => {
     expect(dbIssue).toBeDefined();
     expect(dbIssue?.type).toBe('error');
   });
+
+  it('allows scaling read replicas horizontally up to 8 instances alongside primary DB', () => {
+    const nodes: any[] = [
+      { id: 'db-primary', type: 'database', config: { role: 'primary' }, data: { config: { role: 'primary' } } },
+    ];
+
+    // Primary is already deployed: adding primary again is blocked
+    const checkPrimary = checkComponentLimit(nodes, 'database', 'database');
+    expect(checkPrimary.allowed).toBe(false);
+
+    // Can deploy up to 8 replicas
+    for (let i = 1; i <= 8; i++) {
+      const checkReplica = checkComponentLimit(nodes, 'db_replica', 'database');
+      expect(checkReplica.allowed).toBe(true);
+      expect(checkReplica.currentCount).toBe(i - 1);
+      nodes.push({
+        id: `db-replica-${i}`,
+        type: 'database',
+        config: { role: 'replica' },
+        data: { config: { role: 'replica' } },
+      });
+    }
+
+    // Attempting 9th replica should be blocked by limit (max 8)
+    const checkExceeded = checkComponentLimit(nodes, 'db_replica', 'database');
+    expect(checkExceeded.allowed).toBe(false);
+    expect(checkExceeded.currentCount).toBe(8);
+  });
 });

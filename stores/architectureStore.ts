@@ -31,6 +31,7 @@ export interface ArchitectureState {
   // Architecture actions
   selectNode: (nodeId: string | null) => void;
   addNode: (type: ComponentType, position?: { x: number; y: number }, itemId?: string) => ArchitectureNode | null;
+  addReadReplica: (primaryDbId?: string) => ArchitectureNode | null;
   removeNode: (nodeId: string) => void;
   removeEdge: (edgeId: string) => void;
   updateNodeConfig: (nodeId: string, newConfig: Partial<ArchitectureNode['config']>) => void;
@@ -109,12 +110,20 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
     },
 
     addNode: (type, position, itemId) => {
-      const targetItemId = itemId || type;
+      let targetItemId = itemId || type;
       const currentNodes = get().nodes.map((n) => ({
         type: (n.type || n.data?.type) as ComponentType,
         config: n.data?.config,
         data: n.data,
       }));
+
+      // If user is adding database, and primary DB already exists, auto-route to Read Replica
+      if (type === 'database' && (targetItemId === 'database' || !targetItemId)) {
+        const primaryCount = getComponentCount(currentNodes, 'database', 'database');
+        if (primaryCount >= 1) {
+          targetItemId = 'db_replica';
+        }
+      }
 
       const limitCheck = checkComponentLimit(currentNodes, targetItemId, type);
       if (!limitCheck.allowed) {
@@ -140,8 +149,9 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
             config = DEFAULT_CONFIGS.database('primary', 'small');
             label = 'PostgreSQL Primary';
           } else {
+            const replicaCount = getComponentCount(currentNodes, 'db_replica', 'database');
             config = DEFAULT_CONFIGS.database('replica', 'small');
-            label = 'Read Replica';
+            label = replicaCount > 0 ? `Read Replica ${replicaCount + 1}` : 'Read Replica';
           }
           break;
         case 'redis_cache':
@@ -215,6 +225,87 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
 
       set((state) => ({
         nodes: [...state.nodes, flowNode],
+        selectedNodeId: id,
+      }));
+
+      onArchitectureEditCallback?.();
+      return archNode;
+    },
+
+    addReadReplica: (primaryDbId?: string) => {
+      const { nodes, edges } = get();
+      const currentNodes = nodes.map((n) => ({
+        type: (n.type || n.data?.type) as ComponentType,
+        config: n.data?.config,
+        data: n.data,
+      }));
+
+      const limitCheck = checkComponentLimit(currentNodes, 'db_replica', 'database');
+      if (!limitCheck.allowed) {
+        console.warn(`[Limit Rule] Cannot add db_replica: ${limitCheck.reason}`);
+        return null;
+      }
+
+      // Locate primary database node
+      let primaryNode = primaryDbId ? nodes.find((n) => n.id === primaryDbId) : null;
+      if (!primaryNode) {
+        primaryNode =
+          nodes.find((n) => {
+            const t = n.type || n.data?.type;
+            const role = (n.data?.config as any)?.role;
+            return t === 'database' && (role === 'primary' || !role);
+          }) || nodes.find((n) => (n.type || n.data?.type) === 'database') || null;
+      }
+
+      const replicaCount = getComponentCount(currentNodes, 'db_replica', 'database');
+      const basePos = primaryNode ? primaryNode.position : { x: 500, y: 350 };
+      const replicaPos = {
+        x: basePos.x + 230,
+        y: basePos.y + (replicaCount * 95) - 30,
+      };
+
+      const id = `db-replica-${Date.now().toString(36).slice(-4)}`;
+      const config = DEFAULT_CONFIGS.database('replica', 'small');
+      const label = replicaCount > 0 ? `Read Replica ${replicaCount + 1}` : 'Read Replica';
+
+      const archNode: ArchitectureNode = {
+        id,
+        type: 'database',
+        label,
+        config,
+        position: replicaPos,
+      };
+
+      const flowNode: Node = {
+        id,
+        type: 'database',
+        position: replicaPos,
+        data: {
+          label,
+          type: 'database',
+          config,
+        },
+      };
+
+      // Connect incoming edges from nodes that feed into the primary DB (e.g. app servers)
+      const newEdges: Edge[] = [];
+      if (primaryNode) {
+        const incomingEdges = edges.filter((e) => e.target === primaryNode!.id);
+        incomingEdges.forEach((incEdge) => {
+          newEdges.push({
+            id: `e-${incEdge.source}-${id}-${Date.now().toString(36).slice(-4)}`,
+            source: incEdge.source,
+            target: id,
+            type: 'animatedFlow',
+            animated: true,
+            data: { label: 'read traffic' },
+          });
+        });
+      }
+
+      set((state) => ({
+        nodes: [...state.nodes, flowNode],
+        edges: [...state.edges, ...newEdges],
         selectedNodeId: id,
       }));
 

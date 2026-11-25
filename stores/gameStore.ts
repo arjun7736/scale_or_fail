@@ -96,6 +96,26 @@ const INITIAL_SYSTEM_METRICS: SystemMetrics = {
   consecutiveFailureSeconds: 0,
 };
 
+function createInitialMetricsHistory(): TelemetryDataPoint[] {
+  const points: TelemetryDataPoint[] = [];
+  for (let i = 10; i >= 0; i--) {
+    const sec = Math.max(0, 60 - i * 5);
+    const timeStr = `00:${sec < 10 ? '0' + sec : sec}`;
+    points.push({
+      time: timeStr,
+      tick: 0,
+      incomingRps: 15,
+      succeededRps: 15,
+      failedRps: 0,
+      inFlightRequests: 2,
+      avgLatencyMs: 14,
+      p95LatencyMs: 20,
+      errorRatePercent: 0,
+    });
+  }
+  return points;
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   gameStatus: 'idle',
   speed: 1,
@@ -103,7 +123,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   systemMetrics: INITIAL_SYSTEM_METRICS,
   componentMetrics: {},
   edgeMetrics: {},
-  metricsHistory: [],
+  metricsHistory: createInitialMetricsHistory(),
   alerts: [
     {
       id: 'welcome-1',
@@ -298,7 +318,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       gameStatus: 'idle',
       systemMetrics: INITIAL_SYSTEM_METRICS,
       componentMetrics: {},
-      metricsHistory: [],
+      metricsHistory: createInitialMetricsHistory(),
       alerts: [
         {
           id: `restart-${Date.now()}`,

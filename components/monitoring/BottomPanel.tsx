@@ -24,6 +24,7 @@ import { useGameStore } from '@/stores/gameStore';
 
 export function BottomPanel() {
   const [mobileTab, setMobileTab] = useState<'traffic' | 'latency' | 'errors' | 'logs'>('traffic');
+  const [mobileView, setMobileView] = useState<'split' | 'tabs'>('split');
 
   const bottomPanelMode = useGameStore((s) => s.bottomPanelMode);
   const setBottomPanelMode = useGameStore((s) => s.setBottomPanelMode);
@@ -365,57 +366,85 @@ export function BottomPanel() {
       {/* Main Content Area */}
       {!isMinimized && (
         <div className="flex flex-col">
-          {/* Mobile Tab Switcher (Visible on mobile only) */}
-          <div className="flex md:hidden items-center justify-between px-2 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] font-mono">
-            <div className="flex items-center gap-1 w-full justify-around">
-              <button
-                onClick={() => setMobileTab('traffic')}
-                className={`px-2 py-0.5 rounded transition-all ${
-                  mobileTab === 'traffic'
-                    ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/40'
-                    : 'text-slate-400'
-                }`}
-              >
-                Traffic
-              </button>
-              <button
-                onClick={() => setMobileTab('latency')}
-                className={`px-2 py-0.5 rounded transition-all ${
-                  mobileTab === 'latency'
-                    ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40'
-                    : 'text-slate-400'
-                }`}
-              >
-                Latency
-              </button>
-              <button
-                onClick={() => setMobileTab('errors')}
-                className={`px-2 py-0.5 rounded transition-all ${
-                  mobileTab === 'errors'
-                    ? 'bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40'
-                    : 'text-slate-400'
-                }`}
-              >
-                Errors
-              </button>
-              <button
-                onClick={() => setMobileTab('logs')}
-                className={`px-2 py-0.5 rounded transition-all ${
-                  mobileTab === 'logs'
-                    ? 'bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40'
-                    : 'text-slate-400'
-                }`}
-              >
-                Logs ({alerts.length})
-              </button>
+          {/* Mobile View Toggle Bar */}
+          <div className="flex md:hidden items-center justify-between px-2.5 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-semibold text-[9px]">VIEW:</span>
+              <div className="flex items-center bg-slate-950 rounded border border-slate-800 p-0.5">
+                <button
+                  onClick={() => setMobileView('split')}
+                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all ${
+                    mobileView === 'split'
+                      ? 'bg-teal-500 text-slate-950 font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  4-Panel Split
+                </button>
+                <button
+                  onClick={() => setMobileView('tabs')}
+                  className={`px-1.5 py-0.5 rounded text-[8px] transition-all ${
+                    mobileView === 'tabs'
+                      ? 'bg-teal-500 text-slate-950 font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Tabbed
+                </button>
+              </div>
             </div>
+
+            {mobileView === 'tabs' && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setMobileTab('traffic')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                    mobileTab === 'traffic'
+                      ? 'bg-sky-500/20 text-sky-300 font-bold border border-sky-500/40'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  Traffic
+                </button>
+                <button
+                  onClick={() => setMobileTab('latency')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                    mobileTab === 'latency'
+                      ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  Latency
+                </button>
+                <button
+                  onClick={() => setMobileTab('errors')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                    mobileTab === 'errors'
+                      ? 'bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  Errors
+                </button>
+                <button
+                  onClick={() => setMobileTab('logs')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] transition-all ${
+                    mobileTab === 'logs'
+                      ? 'bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  Logs
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Desktop 4-Column Grid View */}
+          {/* Desktop / Laptop 4-Column Split Grid View */}
           <div
             className={`hidden md:grid ${
-              isCompact ? 'h-36' : 'h-56'
-            } p-2 grid-cols-2 xl:grid-cols-4 gap-2 bg-slate-900/40 transition-all duration-200`}
+              isCompact ? 'h-40 md:h-44' : 'h-60 md:h-64'
+            } p-2 grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-900/40 transition-all duration-200`}
           >
             {renderTrafficPanel()}
             {renderLatencyPanel()}
@@ -423,16 +452,31 @@ export function BottomPanel() {
             {renderLogsPanel()}
           </div>
 
-          {/* Mobile Single Tab View */}
-          <div
-            className={`md:hidden ${
-              isCompact ? 'h-36' : 'h-52'
-            } p-1.5 bg-slate-900/40 transition-all duration-200`}
-          >
-            {mobileTab === 'traffic' && renderTrafficPanel()}
-            {mobileTab === 'latency' && renderLatencyPanel()}
-            {mobileTab === 'errors' && renderErrorPanel()}
-            {mobileTab === 'logs' && renderLogsPanel()}
+          {/* Mobile Display */}
+          <div className="md:hidden">
+            {mobileView === 'split' ? (
+              <div
+                className={`${
+                  isCompact ? 'h-72' : 'h-96'
+                } p-1.5 grid grid-cols-2 gap-1.5 bg-slate-900/40 overflow-y-auto transition-all duration-200`}
+              >
+                {renderTrafficPanel()}
+                {renderLatencyPanel()}
+                {renderErrorPanel()}
+                {renderLogsPanel()}
+              </div>
+            ) : (
+              <div
+                className={`${
+                  isCompact ? 'h-36' : 'h-52'
+                } p-1.5 bg-slate-900/40 transition-all duration-200`}
+              >
+                {mobileTab === 'traffic' && renderTrafficPanel()}
+                {mobileTab === 'latency' && renderLatencyPanel()}
+                {mobileTab === 'errors' && renderErrorPanel()}
+                {mobileTab === 'logs' && renderLogsPanel()}
+              </div>
+            )}
           </div>
         </div>
       )}

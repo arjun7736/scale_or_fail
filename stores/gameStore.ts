@@ -13,6 +13,7 @@ import {
   diagnoseServerIncident,
   ServerIncidentDiagnosis,
 } from '../packages/simulation/failures/diagnosis';
+import { incidentEngine } from '../packages/simulation/failures/incident-engine';
 import { validateArchitecture } from '../packages/simulation/validation';
 import { SimulationBridge } from '../lib/simulation-bridge';
 import { useArchitectureStore, registerArchitectureEditListener } from './architectureStore';
@@ -352,6 +353,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   restartGame: () => {
     const { bridge } = get();
+    incidentEngine.reset();
     useArchitectureStore.getState().resetToStarter();
     const starterGraph = useArchitectureStore.getState().getArchitectureGraph();
 

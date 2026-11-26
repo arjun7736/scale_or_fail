@@ -367,6 +367,16 @@ export function validateArchitecture(
       const tNode = nodeMap.get(neighbor);
       if (sNode?.type === 'database' && tNode?.type === 'database') continue;
 
+      // Skip asynchronous message brokers (Message Queue, Kafka) which decouple execution asynchronously
+      if (
+        sNode?.type === 'message_queue' ||
+        sNode?.type === 'kafka_stream' ||
+        tNode?.type === 'message_queue' ||
+        tNode?.type === 'kafka_stream'
+      ) {
+        continue;
+      }
+
       if (!visited.has(neighbor)) {
         if (detectCycleDFS(neighbor)) {
           cycleNodes.push(nodeId);

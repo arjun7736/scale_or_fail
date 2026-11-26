@@ -340,4 +340,96 @@ describe('Intelligent Architecture Validation & Educational Feedback System', ()
     expect(readConn.isValid).toBe(true);
     expect(readConn.edgeType).toBe('db_read');
   });
+
+  it('should validate Message Broker outgoing connections to Workers, DB sinks, and NoSQL', () => {
+    const queue: ArchitectureNode = {
+      id: 'mq-1',
+      type: 'message_queue',
+      label: 'RabbitMQ',
+      config: DEFAULT_CONFIGS.message_queue(),
+    };
+    const kafka: ArchitectureNode = {
+      id: 'kafka-1',
+      type: 'kafka_stream',
+      label: 'Kafka Cluster',
+      config: DEFAULT_CONFIGS.kafka_stream(),
+    };
+    const app: ArchitectureNode = {
+      id: 'app-worker',
+      type: 'app_server',
+      label: 'Worker App Server',
+      config: DEFAULT_CONFIGS.app_server('small'),
+    };
+    const primaryDb: ArchitectureNode = {
+      id: 'db-primary',
+      type: 'database',
+      label: 'PostgreSQL Primary',
+      config: DEFAULT_CONFIGS.database('primary', 'medium'),
+    };
+    const replicaDb: ArchitectureNode = {
+      id: 'db-replica',
+      type: 'database',
+      label: 'PostgreSQL Replica',
+      config: DEFAULT_CONFIGS.database('replica', 'medium'),
+    };
+    const nosql: ArchitectureNode = {
+      id: 'nosql-1',
+      type: 'distributed_nosql',
+      label: 'Cassandra Ring',
+      config: DEFAULT_CONFIGS.distributed_nosql(),
+    };
+    const dlq: ArchitectureNode = {
+      id: 'mq-dlq',
+      type: 'message_queue',
+      label: 'Dead Letter Queue',
+      config: DEFAULT_CONFIGS.message_queue(),
+    };
+
+    // 1. Queue -> App Server (Worker consumer)
+    const workerConn = classifyConnection(queue, app);
+    expect(workerConn.isValid).toBe(true);
+    expect(workerConn.edgeType).toBe('stream_processing');
+    expect(workerConn.label).toContain('Worker');
+
+    // 2. Queue -> Primary DB (Database Sink)
+    const dbSinkConn = classifyConnection(queue, primaryDb);
+    expect(dbSinkConn.isValid).toBe(true);
+    expect(dbSinkConn.edgeType).toBe('db_read_write');
+    expect(dbSinkConn.label).toContain('Sink');
+
+    // 3. Queue -> Read Replica (Should be rejected because replicas are read-only)
+    const replicaSinkConn = classifyConnection(queue, replicaDb);
+    expect(replicaSinkConn.isValid).toBe(false);
+    expect(replicaSinkConn.issue?.title).toContain('Read Replica');
+
+    // 4. Kafka -> NoSQL (Event Sink)
+    const nosqlSinkConn = classifyConnection(kafka, nosql);
+    expect(nosqlSinkConn.isValid).toBe(true);
+    expect(nosqlSinkConn.edgeType).toBe('db_read_write');
+
+    // 5. Queue -> DLQ (Dead Letter Queue)
+    const dlqConn = classifyConnection(queue, dlq);
+    expect(dlqConn.isValid).toBe(true);
+    expect(dlqConn.edgeType).toBe('async_message');
+
+    // 6. Asynchronous cycle decoupling: App -> Queue -> App must NOT trigger RULE_ROUTING_CYCLE
+    const asyncLoopGraph: ArchitectureGraph = {
+      nodes: [
+        { id: 'client-1', type: 'client', label: 'Client', config: DEFAULT_CONFIGS.client() },
+        { id: 'app-1', type: 'app_server', label: 'App Server', config: DEFAULT_CONFIGS.app_server() },
+        { id: 'mq-1', type: 'message_queue', label: 'Message Queue', config: DEFAULT_CONFIGS.message_queue() },
+        { id: 'db-1', type: 'database', label: 'Primary DB', config: DEFAULT_CONFIGS.database('primary') },
+      ],
+      edges: [
+        { id: 'e1', source: 'client-1', target: 'app-1' },
+        { id: 'e2', source: 'app-1', target: 'mq-1' },
+        { id: 'e3', source: 'mq-1', target: 'app-1' }, // Background consumer feedback
+        { id: 'e4', source: 'app-1', target: 'db-1' },
+      ],
+    };
+
+    const res = validateArchitecture(asyncLoopGraph);
+    const cycleIssues = res.issues.filter((i) => i.ruleId === 'RULE_ROUTING_CYCLE');
+    expect(cycleIssues.length).toBe(0);
+  });
 });

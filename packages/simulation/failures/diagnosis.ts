@@ -4,6 +4,7 @@ import {
   ComponentLiveMetrics,
   SystemMetrics,
 } from '../core/types';
+import { incidentEngine, StructuredIncidentLog, ProductionIncident } from './incident-engine';
 
 export interface ServerIncidentDiagnosis {
   hasIncident: boolean;
@@ -23,17 +24,26 @@ export interface ServerIncidentDiagnosis {
   technicalDetails: string;
   preventionAdvice: string;
   actionableSteps: string[];
-  suggestedActionType?: 'upgrade_tier' | 'add_lb' | 'add_redis' | 'enable_pooling' | 'connect_db';
+  suggestedActionType?: 'upgrade_tier' | 'add_lb' | 'add_redis' | 'enable_pooling' | 'connect_db' | 'add_replica' | 'upgrade_db';
+  structuredLogs?: StructuredIncidentLog[];
+  actionableSolutions?: {
+    title: string;
+    description: string;
+    tradeOff: string;
+    actionType: string;
+  }[];
+  educationalPrinciple?: string;
 }
 
 /**
- * Inspects all application servers in the architecture graph to detect crashes,
+ * Inspects all application servers and infrastructure in the architecture graph to detect crashes,
  * identify the exact breaking failure, and formulate step-by-step prevention steps.
  */
 export function diagnoseServerIncident(
   graph: ArchitectureGraph,
   componentMetrics: Record<string, ComponentLiveMetrics>,
-  systemMetrics: SystemMetrics
+  systemMetrics: SystemMetrics,
+  engine = incidentEngine
 ): ServerIncidentDiagnosis | null {
   const nodeMap = new Map<string, ArchitectureNode>(graph.nodes.map((n) => [n.id, n]));
   const outgoingEdges = new Map<string, string[]>();
@@ -48,6 +58,75 @@ export function diagnoseServerIncident(
   const databases = graph.nodes.filter((n) => n.type === 'database');
   const primaryDb = databases.find((n) => (n.config as any).role === 'primary');
   const primaryDbMetrics = primaryDb ? componentMetrics[primaryDb.id] : undefined;
+
+  // 1. Structural check: Disconnected from storage
+  const disconnectedServer = appServers.find((server) => {
+    const sTargets = outgoingEdges.get(server.id) || [];
+    const connectedDbs = sTargets.map((id) => nodeMap.get(id)).filter((n) => n && n.type === 'database');
+    const connectedCaches = sTargets.map((id) => nodeMap.get(id)).filter((n) => n && n.type === 'redis_cache');
+    const m = componentMetrics[server.id];
+    return connectedDbs.length === 0 && connectedCaches.length === 0 && m && (m.health === 'failed' || m.health === 'critical' || m.errorRate > 0.4);
+  });
+
+  if (disconnectedServer) {
+    const sMetrics = componentMetrics[disconnectedServer.id]!;
+    return {
+      hasIncident: true,
+      crashedNodeId: disconnectedServer.id,
+      crashedNodeLabel: disconnectedServer.label,
+      severity: 'critical',
+      title: `SERVER BROKEN: "${disconnectedServer.label}" has no database connected!`,
+      exactError: 'HTTP 500 Internal Server Error: Application server cannot query, authenticate, or persist state because no Database or Cache is reachable.',
+      rootCauseCategory: 'unconnected_storage',
+      technicalDetails: `Server received ${sMetrics.throughputInRps.toLocaleString()} req/s, but has 0 outgoing connections to any persistence layer. All incoming HTTP worker threads immediately threw unhandled connection exceptions.`,
+      preventionAdvice: 'Connect your application server to a Database or Cache.',
+      actionableSteps: [
+        `Draw an edge connection from "${disconnectedServer.label}" to your PostgreSQL Primary database.`,
+        'Ensure the line connects to the purple Database handle.',
+      ],
+      suggestedActionType: 'connect_db',
+    };
+  }
+
+  // 2. Evaluate production incidents via IncidentEngine (telemetry, root cause, structured logs)
+  const { currentIncident } = engine.evaluateTick(
+    systemMetrics.tick,
+    systemMetrics.simTimeSeconds,
+    graph,
+    systemMetrics,
+    componentMetrics
+  );
+
+  if (currentIncident) {
+    const culpritNode = currentIncident.culpritNodeId
+      ? graph.nodes.find((n) => n.id === currentIncident.culpritNodeId)
+      : undefined;
+
+    const categoryMap: Record<string, ServerIncidentDiagnosis['rootCauseCategory']> = {
+      database: 'db_connection_starvation',
+      container: 'oom',
+      cache: 'timeout_cascade',
+      compute: 'cpu_saturation',
+      network: 'timeout_cascade',
+    };
+
+    return {
+      hasIncident: true,
+      crashedNodeId: currentIncident.culpritNodeId,
+      crashedNodeLabel: culpritNode?.label,
+      severity: currentIncident.severity,
+      title: currentIncident.name,
+      exactError: currentIncident.description,
+      rootCauseCategory: categoryMap[currentIncident.category] || 'cpu_saturation',
+      technicalDetails: currentIncident.technicalRootCause,
+      preventionAdvice: currentIncident.recoveryConditionsDescription,
+      actionableSteps: currentIncident.actionableSolutions.map((s) => `${s.title}: ${s.description}`),
+      actionableSolutions: currentIncident.actionableSolutions,
+      structuredLogs: currentIncident.structuredLogs,
+      educationalPrinciple: currentIncident.educationalPrinciple,
+      suggestedActionType: currentIncident.actionableSolutions[0]?.actionType as any,
+    };
+  }
 
   // 1. Find crashed or critically failing servers
   const crashedServer = appServers.find((s) => {

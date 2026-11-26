@@ -1,10 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { diagnoseServerIncident } from '../failures/diagnosis';
+import { incidentEngine } from '../failures/incident-engine';
 import { STARTER_ARCHITECTURE } from '../scenarios/starter';
 import { ArchitectureGraph, ComponentLiveMetrics, SystemMetrics } from '../core/types';
 import { DEFAULT_CONFIGS } from '../models/economics';
 
 describe('Server Incident Diagnosis Engine', () => {
+  beforeEach(() => {
+    incidentEngine.reset();
+  });
   const dummySystemMetrics: SystemMetrics = {
     tick: 50,
     simTimeSeconds: 50,

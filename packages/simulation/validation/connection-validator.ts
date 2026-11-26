@@ -207,13 +207,81 @@ export function classifyConnection(
     }
   }
 
-  // 5. Message Queue / Kafka to App Server (Worker consumer)
-  if ((sType === 'message_queue' || sType === 'kafka_stream') && tType === 'app_server') {
-    return {
-      isValid: true,
-      edgeType: 'stream_processing',
-      label: 'Worker Stream Consumer',
-    };
+  // 5. Message Queue / Kafka outgoing connections (Worker consumer, DB sink, NoSQL, Cache, DLQ)
+  if (sType === 'message_queue' || sType === 'kafka_stream') {
+    if (tType === 'app_server') {
+      return {
+        isValid: true,
+        edgeType: 'stream_processing',
+        label: 'Worker Stream Consumer',
+      };
+    }
+
+    if (tType === 'database') {
+      const targetRole = tCfg?.role || 'primary';
+      if (targetRole === 'replica') {
+        return {
+          isValid: false,
+          edgeType: 'unsupported',
+          label: 'Invalid: Replica Write Sink',
+          issue: {
+            id: `issue-queue-replica-${source.id}-${target.id}`,
+            ruleId: 'RULE_QUEUE_TO_REPLICA',
+            title: 'Message Broker Cannot Sink Writes to Read Replica',
+            category: 'invalid',
+            severity: 'error',
+            message: 'A Message Queue or Kafka Stream sink cannot write events directly to a PostgreSQL Read Replica. Read replicas are strictly read-only standbys.',
+            explanation: 'In relational database architectures, write streams must target the Primary database. Read replicas only accept writes via internal WAL replication.',
+            consequence: 'Write transactions from the message consumer will be rejected by the read-only standby (SQL Error: 25006 read-only transaction).',
+            suggestedApproaches: [
+              {
+                title: 'Connect to Primary Database',
+                description: 'Direct the message broker sink to your PostgreSQL Primary database instance.',
+              },
+            ],
+            learningConcept: 'Primary Write Concentration & Replica Read-Only Constraints',
+            relatedNodeIds: [source.id, target.id],
+          },
+        };
+      }
+      return {
+        isValid: true,
+        edgeType: 'db_read_write',
+        label: 'Database Sink (Write-Behind)',
+      };
+    }
+
+    if (tType === 'distributed_nosql') {
+      return {
+        isValid: true,
+        edgeType: 'db_read_write',
+        label: 'NoSQL Event Sink',
+      };
+    }
+
+    if (tType === 'redis_cache') {
+      return {
+        isValid: true,
+        edgeType: 'cache_access',
+        label: 'Cache Invalidation / Warm-up',
+      };
+    }
+
+    if (tType === 'message_queue') {
+      return {
+        isValid: true,
+        edgeType: 'async_message',
+        label: 'Dead Letter Queue (DLQ) / Retry Flow',
+      };
+    }
+
+    if (tType === 'kafka_stream') {
+      return {
+        isValid: true,
+        edgeType: 'stream_processing',
+        label: 'Stream Pipeline / MirrorMaker',
+      };
+    }
   }
 
   // 6. DB Sharding Router to Database

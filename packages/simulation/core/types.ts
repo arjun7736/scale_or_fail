@@ -24,6 +24,36 @@ export type LoadBalancerAlgorithm = 'round_robin' | 'least_conn' | 'ip_hash';
 
 export type DatabaseRole = 'primary' | 'replica';
 
+export type ContainerRuntime = 'bare_metal' | 'docker' | 'kubernetes';
+
+export interface DockerContainerConfig {
+  cpuLimitCores?: number; // cgroup quota limit, e.g. 1.5 cores
+  ramLimitMb?: number; // cgroup memory limit, e.g. 2048 MB
+  restartPolicy?: 'always' | 'on_failure' | 'never';
+}
+
+export interface KubernetesPodConfig {
+  replicas: number; // Current deployed pod replicas
+  minReplicas: number;
+  maxReplicas: number;
+  targetCpuUtilization: number; // e.g. 75% threshold for HPA
+  readinessProbeDelaySeconds: number; // Startup grace period before receiving traffic
+  isAutoscalingEnabled: boolean;
+}
+
+export interface WorkerPoolConfig {
+  minWorkers: number;
+  maxWorkers: number;
+  queueCapacity: number;
+  rejectionPolicy: 'abort' | 'caller_runs' | 'discard';
+}
+
+export interface ConnectionPoolConfig {
+  minConnections: number;
+  maxConnections: number;
+  connectionTimeoutMs: number;
+}
+
 export interface BaseNodeConfig {
   name: string;
   costPerHour: number;
@@ -47,6 +77,11 @@ export interface AppServerNodeConfig extends BaseNodeConfig {
   threadPoolSize: number;
   baseProcessingMs: number;
   memoryPerRequestMb: number;
+  containerRuntime?: ContainerRuntime;
+  dockerConfig?: DockerContainerConfig;
+  k8sConfig?: KubernetesPodConfig;
+  workerPool?: WorkerPoolConfig;
+  connectionPool?: ConnectionPoolConfig;
 }
 
 export interface DatabaseNodeConfig extends BaseNodeConfig {
@@ -59,6 +94,8 @@ export interface DatabaseNodeConfig extends BaseNodeConfig {
   writeLatencyMs: number;
   queryOptimizationIndex: boolean;
   connectionPooling?: boolean;
+  replicationLagMs?: number;
+  clientConnectionPool?: ConnectionPoolConfig;
 }
 
 export interface RedisCacheNodeConfig extends BaseNodeConfig {
@@ -245,6 +282,13 @@ export interface ComponentLiveMetrics {
   isOom?: boolean;
   cacheHitRps?: number;
   cacheMissRps?: number;
+  // Container & Orchestration runtime metrics
+  containerRestarts?: number;
+  oomKilledCount?: number;
+  activePods?: number;
+  targetPods?: number;
+  connectionPoolWaitTimeMs?: number;
+  workerThreadUtilization?: number;
 }
 
 export interface SystemMetrics {
@@ -267,6 +311,11 @@ export interface SystemMetrics {
   stageName: string;
   oneMillionMilestoneReached: boolean;
   consecutiveFailureSeconds: number;
+  // Distinct operation accounting
+  activeClientConnections?: number;
+  dbQueriesTotalRps?: number;
+  cacheHitsTotalRps?: number;
+  queueMessagesTotalRps?: number;
 }
 
 export type AlertSeverity = 'info' | 'warning' | 'critical' | 'resolved';

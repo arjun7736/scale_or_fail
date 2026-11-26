@@ -541,25 +541,59 @@ export function routeTrafficThroughGraph(
       componentMetrics[qId].p95LatencyMs = 5;
       componentMetrics[qId].statusMessage = `Kafka log streaming ${demandRps.toLocaleString()} events/s across ${kConfig.partitionsCount} partitions`;
       componentMetrics[qId].health = kUtil > 90 ? 'warning' : 'healthy';
-      continue;
+    } else {
+      const qConfig = qNode.config as import('../core/types').MessageQueueNodeConfig;
+      const qRes = calculateQueueCapacity(qConfig, demandRps);
+
+      componentMetrics[qId].throughputInRps = demandRps;
+      componentMetrics[qId].throughputOutRps = qRes.drainRateRps;
+      componentMetrics[qId].queueDepth = qRes.bufferUsed;
+      componentMetrics[qId].connectionsMax = qRes.bufferCapacity;
+      componentMetrics[qId].cpuUtilization = Math.round((qRes.bufferUsed / qRes.bufferCapacity) * 100);
+
+      if (qRes.isOverflowing) {
+        componentMetrics[qId].health = 'critical';
+        componentMetrics[qId].statusMessage = 'Buffer full! Dropping async messages';
+        componentMetrics[qId].droppedRps = Math.max(0, demandRps - qRes.drainRateRps);
+      } else {
+        componentMetrics[qId].health = 'healthy';
+        componentMetrics[qId].statusMessage = `Buffered: ${qRes.bufferUsed.toLocaleString()} msgs`;
+      }
     }
 
-    const qConfig = qNode.config as import('../core/types').MessageQueueNodeConfig;
-    const qRes = calculateQueueCapacity(qConfig, demandRps);
+    // Route drained messages along any downstream outgoing edges (Worker, DB sink, NoSQL sink, etc.)
+    const qOutEdges = outgoingEdges.get(qId) || [];
+    if (qOutEdges.length > 0) {
+      const drainRps = componentMetrics[qId].throughputOutRps;
+      const drainPerTarget = Math.floor(drainRps / qOutEdges.length);
+      for (const edge of qOutEdges) {
+        const targetNode = nodeMap.get(edge.target);
+        if (!targetNode) continue;
+        if (targetNode.type === 'database') {
+          dbWriteDemandMap.set(targetNode.id, (dbWriteDemandMap.get(targetNode.id) || 0) + drainPerTarget);
+          recordEdgeFlow(qId, targetNode.id, drainPerTarget, 8, 'healthy');
+        } else if (targetNode.type === 'distributed_nosql') {
+          recordEdgeFlow(qId, targetNode.id, drainPerTarget, 5, 'healthy');
+        } else if (targetNode.type === 'app_server') {
+          recordEdgeFlow(qId, targetNode.id, drainPerTarget, 4, 'healthy');
+        } else if (targetNode.type === 'redis_cache') {
+          recordEdgeFlow(qId, targetNode.id, drainPerTarget, 2, 'healthy');
+        } else if (targetNode.type === 'message_queue' || targetNode.type === 'kafka_stream') {
+          recordEdgeFlow(qId, targetNode.id, drainPerTarget, 2, 'healthy');
+        }
+      }
+    }
+  }
 
-    componentMetrics[qId].throughputInRps = demandRps;
-    componentMetrics[qId].throughputOutRps = qRes.drainRateRps;
-    componentMetrics[qId].queueDepth = qRes.bufferUsed;
-    componentMetrics[qId].connectionsMax = qRes.bufferCapacity;
-    componentMetrics[qId].cpuUtilization = Math.round((qRes.bufferUsed / qRes.bufferCapacity) * 100);
-
-    if (qRes.isOverflowing) {
-      componentMetrics[qId].health = 'critical';
-      componentMetrics[qId].statusMessage = 'Buffer full! Dropping async messages';
-      componentMetrics[qId].droppedRps = Math.max(0, demandRps - qRes.drainRateRps);
-    } else {
-      componentMetrics[qId].health = 'healthy';
-      componentMetrics[qId].statusMessage = `Buffered: ${qRes.bufferUsed.toLocaleString()} msgs`;
+  // Ensure idle message broker edges are recorded
+  for (const node of graph.nodes) {
+    if (node.type === 'message_queue' || node.type === 'kafka_stream') {
+      const qOutEdges = outgoingEdges.get(node.id) || [];
+      for (const edge of qOutEdges) {
+        if (!edgeMetrics[edge.id] || edgeMetrics[edge.id].throughputRps === 0) {
+          recordEdgeFlow(node.id, edge.target, 0, 0, 'healthy');
+        }
+      }
     }
   }
 
@@ -644,6 +678,7 @@ export function routeTrafficThroughGraph(
   let maxDbLatencyMs = 10;
   let primaryDbFailed = false;
   let anyDbConnectionExhausted = false;
+  let totalDbQueriesRps = 0;
 
   for (const [dbId, readsRps] of dbReadDemandMap.entries()) {
     const dbNode = nodeMap.get(dbId);
@@ -652,34 +687,43 @@ export function routeTrafficThroughGraph(
     const dbConfig = dbNode.config as import('../core/types').DatabaseNodeConfig;
     const writesRps = dbWriteDemandMap.get(dbId) || 0;
     const threads = dbThreadDemandMap.get(dbId) || 10;
+    const nodeTotalQueries = readsRps + writesRps;
+    totalDbQueriesRps += nodeTotalQueries;
 
     const dbRes = calculateDatabaseCapacity(dbConfig, readsRps, writesRps, threads);
     const connRatio = dbRes.connectionsActive / Math.max(1, dbRes.connectionsMax);
     const nodeBottleneck = Math.max(dbRes.iopsUtilization, connRatio);
     dbBottleneckUtilization = Math.max(dbBottleneckUtilization, nodeBottleneck);
 
-    const latency = dbRes.effectiveReadLatencyMs + (dbRes.isConnectionExhausted ? 1200 : 0);
+    const latency = dbRes.effectiveReadLatencyMs + dbRes.effectiveConnectionWaitMs;
     maxDbLatencyMs = Math.max(maxDbLatencyMs, latency);
 
-    componentMetrics[dbId].throughputInRps = readsRps + writesRps;
-    componentMetrics[dbId].throughputOutRps = readsRps + writesRps;
+    componentMetrics[dbId].throughputInRps = nodeTotalQueries;
+    componentMetrics[dbId].throughputOutRps = Math.max(0, nodeTotalQueries - dbRes.connectionTimeoutDrops);
     componentMetrics[dbId].cpuUtilization = Math.round(dbRes.iopsUtilization * 100);
     componentMetrics[dbId].connectionsActive = dbRes.connectionsActive;
     componentMetrics[dbId].connectionsMax = dbRes.connectionsMax;
     componentMetrics[dbId].queueDepth = dbRes.connectionWaitQueue;
     componentMetrics[dbId].avgLatencyMs = Math.round(latency);
+    componentMetrics[dbId].droppedRps = dbRes.connectionTimeoutDrops;
+    componentMetrics[dbId].connectionPoolWaitTimeMs = Math.round(dbRes.effectiveConnectionWaitMs);
 
-    if (dbRes.isConnectionExhausted) {
+    if (dbRes.connectionTimeoutDrops > 0) {
       anyDbConnectionExhausted = true;
       componentMetrics[dbId].health = 'critical';
-      componentMetrics[dbId].statusMessage = `Connection pool exhausted (${dbRes.connectionsActive}/${dbRes.connectionsMax})! Queries queueing.`;
+      componentMetrics[dbId].statusMessage = `Connection pool exhausted (${dbRes.connectionsActive}/${dbRes.connectionsMax})! Dropping ${dbRes.connectionTimeoutDrops} RPS with 504 Gateway Timeout.`;
       if (dbConfig.role === 'primary') primaryDbFailed = true;
+    } else if (dbRes.isConnectionExhausted) {
+      anyDbConnectionExhausted = true;
+      componentMetrics[dbId].health = 'warning';
+      componentMetrics[dbId].statusMessage = `Connection pool saturated (${dbRes.connectionsActive}/${dbRes.connectionsMax}). Queries waiting ${Math.round(dbRes.effectiveConnectionWaitMs)}ms.`;
     } else if (dbRes.iopsUtilization > 0.85) {
       componentMetrics[dbId].health = 'warning';
       componentMetrics[dbId].statusMessage = 'High disk IOPS saturation';
     } else {
       componentMetrics[dbId].health = 'healthy';
-      componentMetrics[dbId].statusMessage = dbConfig.role === 'primary' ? 'Handling read/write queries' : 'Offloading read queries';
+      componentMetrics[dbId].statusMessage =
+        dbConfig.role === 'primary' ? 'Handling read/write queries' : 'Offloading read queries';
     }
   }
 
@@ -705,9 +749,6 @@ export function routeTrafficThroughGraph(
       continue;
     }
 
-    const hasDb = ctx.connectedDbs.length > 0;
-    const isDbMissingForCacheOnly = !hasDb && ctx.connectedCaches.length > 0;
-
     const redisLatency = ctx.connectedCaches.length > 0 ? 1.5 : 0;
     const serverResult = calculateAppServerCapacity(sConfig, ctx.serverRps, maxDbLatencyMs + redisLatency);
 
@@ -722,11 +763,30 @@ export function routeTrafficThroughGraph(
     componentMetrics[server.id].connectionsMax = serverResult.threadsMax;
     componentMetrics[server.id].queueDepth = serverResult.threadWaitQueue;
     componentMetrics[server.id].avgLatencyMs = Math.round(serverResult.effectiveServiceMs + maxDbLatencyMs);
+    componentMetrics[server.id].activePods = serverResult.activePods;
+    componentMetrics[server.id].targetPods = serverResult.targetPods;
+    componentMetrics[server.id].workerThreadUtilization = Math.round(
+      (serverResult.threadsActive / Math.max(1, serverResult.threadsMax)) * 100
+    );
 
     if (serverResult.isOom) {
       anyAppServerOom = true;
       componentMetrics[server.id].health = 'failed';
-      componentMetrics[server.id].statusMessage = 'OOM Crash: Out of Memory!';
+      componentMetrics[server.id].isOom = true;
+      const prevRestarts = previousComponentMetrics?.[server.id]?.containerRestarts || 0;
+      componentMetrics[server.id].containerRestarts = prevRestarts + 1;
+      componentMetrics[server.id].oomKilledCount = (previousComponentMetrics?.[server.id]?.oomKilledCount || 0) + 1;
+      componentMetrics[server.id].statusMessage =
+        sConfig.containerRuntime === 'kubernetes'
+          ? 'Kubernetes CrashLoopBackOff: Pod OOMKilled (Memory limit exceeded)!'
+          : 'OOM Crash: Out of Memory!';
+    } else if (serverResult.queueOverflowDrops > 0) {
+      componentMetrics[server.id].health = 'critical';
+      componentMetrics[server.id].droppedRps = serverResult.queueOverflowDrops;
+      componentMetrics[server.id].statusMessage = `Worker thread queue full: Rejected ${serverResult.queueOverflowDrops} RPS (HTTP 503).`;
+    } else if (serverResult.isCpuThrottled) {
+      componentMetrics[server.id].health = 'warning';
+      componentMetrics[server.id].statusMessage = 'Container CPU throttled (cgroup quota exhausted)! Service latency degraded.';
     } else if (serverResult.cpuUtilization > 0.90 || serverResult.threadWaitQueue > 200) {
       componentMetrics[server.id].health = 'critical';
       componentMetrics[server.id].statusMessage = 'CPU overloaded & worker threads saturated';
@@ -735,7 +795,10 @@ export function routeTrafficThroughGraph(
       componentMetrics[server.id].statusMessage = 'Elevated compute load';
     } else {
       componentMetrics[server.id].health = 'healthy';
-      componentMetrics[server.id].statusMessage = 'Healthy';
+      componentMetrics[server.id].statusMessage =
+        sConfig.containerRuntime === 'kubernetes'
+          ? `Kubernetes Pods: ${serverResult.activePods} replicas active`
+          : 'Healthy';
     }
   }
 
@@ -812,6 +875,20 @@ export function routeTrafficThroughGraph(
     systemHealth = 'warning';
   }
 
+  // Aggregate internal operation volumes
+  let totalCacheHitsRps = 0;
+  for (const node of graph.nodes) {
+    if (node.type === 'redis_cache') {
+      totalCacheHitsRps += componentMetrics[node.id]?.cacheHitRps || 0;
+    }
+  }
+  let totalQueueMessagesRps = 0;
+  for (const node of graph.nodes) {
+    if (node.type === 'message_queue' || node.type === 'kafka_stream') {
+      totalQueueMessagesRps += componentMetrics[node.id]?.throughputInRps || 0;
+    }
+  }
+
   return {
     systemMetricsPartial: {
       incomingRps: traffic.totalRps,
@@ -822,6 +899,10 @@ export function routeTrafficThroughGraph(
       p95LatencyMs: Math.max(4, Math.round(queueingResult.p95LatencyMs - anycastLatencyOffset)),
       errorRate: totalErrorRate,
       systemHealth,
+      activeClientConnections: queueingResult.inFlightRequests,
+      dbQueriesTotalRps: totalDbQueriesRps,
+      cacheHitsTotalRps: totalCacheHitsRps,
+      queueMessagesTotalRps: totalQueueMessagesRps,
     },
     componentMetrics,
     edgeMetrics,

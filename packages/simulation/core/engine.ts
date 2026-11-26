@@ -137,6 +137,10 @@ export class SimulationEngine {
       stageName: trafficInfo.stageName,
       oneMillionMilestoneReached: this.oneMillionMilestoneReached,
       consecutiveFailureSeconds: 0,
+      activeClientConnections: routeResult.systemMetricsPartial.activeClientConnections || currentInFlight,
+      dbQueriesTotalRps: routeResult.systemMetricsPartial.dbQueriesTotalRps || 0,
+      cacheHitsTotalRps: routeResult.systemMetricsPartial.cacheHitsTotalRps || 0,
+      queueMessagesTotalRps: routeResult.systemMetricsPartial.queueMessagesTotalRps || 0,
     };
 
     // 8. Failure & Game Over Evaluation

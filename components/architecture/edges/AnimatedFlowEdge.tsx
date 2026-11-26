@@ -74,11 +74,11 @@ export function AnimatedFlowEdge({
   } else if (edgeType === 'async_message' || edgeType === 'stream_processing') {
     strokeColor = '#a855f7'; // Purple
     badgeBorder = 'border-purple-500/40 bg-slate-950/90 text-purple-300';
-    badgeLabel = edgeType === 'stream_processing' ? 'Kafka Stream' : 'Async Queue';
+    badgeLabel = (data?.label as string) || (edgeType === 'stream_processing' ? 'Kafka Stream' : 'Async Queue');
   } else if (edgeType === 'db_read_write' || edgeType === 'db_read') {
     strokeColor = '#38bdf8'; // Sky blue
     badgeBorder = 'border-sky-500/40 bg-slate-950/90 text-sky-300';
-    badgeLabel = edgeType === 'db_read' ? 'DB Read' : 'DB Read/Write';
+    badgeLabel = (data?.label as string) || (edgeType === 'db_read' ? 'DB Read' : 'DB Read/Write');
   }
 
   // Adaptive stroke width

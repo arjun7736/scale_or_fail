@@ -17,6 +17,10 @@ export interface AppServerCapacityResult {
   threadWaitQueue: number;
   isOom: boolean;
   effectiveServiceMs: number;
+  activePods: number;
+  targetPods: number;
+  isCpuThrottled: boolean;
+  queueOverflowDrops: number;
 }
 
 export interface DatabaseCapacityResult {
@@ -29,57 +33,104 @@ export interface DatabaseCapacityResult {
   isConnectionExhausted: boolean;
   effectiveReadLatencyMs: number;
   effectiveWriteLatencyMs: number;
+  connectionTimeoutDrops: number;
+  effectiveConnectionWaitMs: number;
 }
 
 /**
- * Calculates App Server processing capacity and resource utilization
+ * Calculates App Server processing capacity and resource utilization,
+ * accounting for bare metal, Docker cgroup limits, Kubernetes pod replicas,
+ * and worker thread pool rejection policies.
  */
 export function calculateAppServerCapacity(
   config: AppServerNodeConfig,
   incomingRps: number,
   downstreamLatencyMs: number = 0
 ): AppServerCapacityResult {
-  // Base single-thread computation capacity
-  const requestsPerCorePerSec = 1000 / Math.max(1, config.baseProcessingMs);
-  // Thread concurrency allows interleaving I/O wait
-  const ioConcurrencyBonus = Math.min(3.0, 1.0 + Math.log10(Math.max(10, config.threadPoolSize) / 10) * 0.4);
-  const maxRps = config.cpuCores * requestsPerCorePerSec * ioConcurrencyBonus;
+  // 1. Determine active pod/container replicas
+  const isK8s = config.containerRuntime === 'kubernetes';
+  const isDocker = config.containerRuntime === 'docker';
+  const podReplicas = isK8s && config.k8sConfig ? Math.max(1, config.k8sConfig.replicas) : 1;
+  const targetPods = isK8s && config.k8sConfig ? config.k8sConfig.replicas : 1;
 
-  // CPU utilization based on compute load
+  // 2. Compute effective CPU and RAM limits
+  let effectiveCpuCores = config.cpuCores;
+  let effectiveRamLimitMb = config.ramGb * 1024;
+
+  if (isDocker && config.dockerConfig) {
+    if (config.dockerConfig.cpuLimitCores) {
+      effectiveCpuCores = Math.min(config.cpuCores, config.dockerConfig.cpuLimitCores);
+    }
+    if (config.dockerConfig.ramLimitMb) {
+      effectiveRamLimitMb = config.dockerConfig.ramLimitMb;
+    }
+  }
+
+  // Aggregate thread pool size across all active replicas
+  const effectiveThreadPoolSize = (config.threadPoolSize || 50) * podReplicas;
+
+  // 3. Base single-thread computation capacity
+  const requestsPerCorePerSec = 1000 / Math.max(1, config.baseProcessingMs);
+  const ioConcurrencyBonus = Math.min(
+    3.0,
+    1.0 + Math.log10(Math.max(10, effectiveThreadPoolSize) / 10) * 0.4
+  );
+  const maxRpsPerReplica = effectiveCpuCores * requestsPerCorePerSec * ioConcurrencyBonus;
+  const maxRps = maxRpsPerReplica * podReplicas;
+
+  // 4. CPU utilization & throttling
   const rawCpuLoad = incomingRps / Math.max(1, maxRps);
   const cpuUtilization = Math.min(1.0, Math.max(0, rawCpuLoad));
+  const isCpuThrottled = (isDocker || isK8s) && rawCpuLoad > 0.95;
 
-  // Total turnaround time for this server including I/O wait
-  const effectiveComputeMs = config.baseProcessingMs * (1 + Math.pow(cpuUtilization, 3) * 2.5);
+  // Throttling penalty when cgroup limits are exceeded
+  const throttleLatencyPenaltyMs = isCpuThrottled ? config.baseProcessingMs * 1.8 : 0;
+  const effectiveComputeMs =
+    config.baseProcessingMs * (1 + Math.pow(cpuUtilization, 3) * 2.5) + throttleLatencyPenaltyMs;
   const totalTurnaroundMs = effectiveComputeMs + downstreamLatencyMs;
 
-  // In-flight concurrency required by Little's Law: L = lambda * W
+  // 5. In-flight concurrency required by Little's Law: L = lambda * W
   const requiredConcurrency = Math.ceil(incomingRps * (totalTurnaroundMs / 1000));
-  const threadsActive = Math.min(config.threadPoolSize, requiredConcurrency);
-  const threadWaitQueue = Math.max(0, requiredConcurrency - config.threadPoolSize);
+  const threadsActive = Math.min(effectiveThreadPoolSize, requiredConcurrency);
+  const rawThreadWaitQueue = Math.max(0, requiredConcurrency - effectiveThreadPoolSize);
 
-  // RAM usage = 300MB base runtime + memory per active in-flight request
-  const baseRamMb = 350;
-  const inFlightRamMb = (threadsActive + threadWaitQueue * 0.5) * config.memoryPerRequestMb;
-  const totalRamMb = baseRamMb + inFlightRamMb;
-  const ramLimitMb = config.ramGb * 1024;
-  const ramUtilization = Math.min(1.0, totalRamMb / ramLimitMb);
-  const isOom = totalRamMb > ramLimitMb;
+  // 6. Worker Pool queue capacity & rejection policy
+  const workerQueueCap = (config.workerPool?.queueCapacity ?? 1000) * podReplicas;
+  let queueOverflowDrops = 0;
+  let threadWaitQueue = rawThreadWaitQueue;
+
+  if (rawThreadWaitQueue > workerQueueCap) {
+    queueOverflowDrops = rawThreadWaitQueue - workerQueueCap;
+    threadWaitQueue = workerQueueCap;
+  }
+
+  // 7. RAM usage: base runtime per pod + memory per active in-flight request
+  const baseRamMbPerPod = 350;
+  const inFlightRamMb =
+    (threadsActive + threadWaitQueue * 0.5) * (config.memoryPerRequestMb || 12);
+  const totalRamMb = baseRamMbPerPod * podReplicas + inFlightRamMb;
+  const totalAllowedRamMb = effectiveRamLimitMb * podReplicas;
+  const ramUtilization = Math.min(1.0, totalRamMb / Math.max(1, totalAllowedRamMb));
+  const isOom = totalRamMb > totalAllowedRamMb;
 
   return {
     maxRps,
     cpuUtilization,
     ramUtilization,
     threadsActive,
-    threadsMax: config.threadPoolSize,
+    threadsMax: effectiveThreadPoolSize,
     threadWaitQueue,
     isOom,
     effectiveServiceMs: effectiveComputeMs,
+    activePods: podReplicas,
+    targetPods,
+    isCpuThrottled,
+    queueOverflowDrops,
   };
 }
 
 /**
- * Calculates Database capacity, IOPS and connection pool saturation
+ * Calculates Database capacity, IOPS, connection pool saturation, and client connection timeouts.
  */
 export function calculateDatabaseCapacity(
   config: DatabaseNodeConfig,
@@ -108,7 +159,9 @@ export function calculateDatabaseCapacity(
   // With Connection Pooling (PgBouncer), worker threads share multiplexed pooled backend connections:
   const threadRatio = config.connectionPooling
     ? 0.08
-    : (config.role === 'primary' ? 0.35 : 0.25);
+    : config.role === 'primary'
+    ? 0.35
+    : 0.25;
   const throughputRatio = config.connectionPooling ? 0.01 : 0.04;
 
   const estimatedConnectionsDemanded = Math.ceil(
@@ -118,6 +171,21 @@ export function calculateDatabaseCapacity(
   const connectionsActive = Math.min(config.maxConnections, estimatedConnectionsDemanded);
   const connectionWaitQueue = Math.max(0, estimatedConnectionsDemanded - config.maxConnections);
   const isConnectionExhausted = estimatedConnectionsDemanded > config.maxConnections;
+
+  // Realistic Connection Timeout Modeling:
+  // If connection queue builds up, calculate wait time.
+  const connTimeoutMs = config.clientConnectionPool?.connectionTimeoutMs ?? 2000;
+  const serviceRatePerConnMs = Math.max(5, (effectiveReadLatencyMs + effectiveWriteLatencyMs) / 2);
+  const effectiveConnectionWaitMs = isConnectionExhausted
+    ? Math.min(connTimeoutMs * 1.5, (connectionWaitQueue / Math.max(1, connectionsActive)) * serviceRatePerConnMs * 10)
+    : 0;
+
+  // If connection wait time breaches connectionTimeoutMs, queries drop as timeouts
+  let connectionTimeoutDrops = 0;
+  if (effectiveConnectionWaitMs >= connTimeoutMs) {
+    const timeoutRatio = Math.min(1.0, (effectiveConnectionWaitMs - connTimeoutMs + 200) / connTimeoutMs);
+    connectionTimeoutDrops = Math.floor((readRps + writeRps) * timeoutRatio * 0.6);
+  }
 
   return {
     readCapacityRps,
@@ -129,6 +197,8 @@ export function calculateDatabaseCapacity(
     isConnectionExhausted,
     effectiveReadLatencyMs,
     effectiveWriteLatencyMs,
+    connectionTimeoutDrops,
+    effectiveConnectionWaitMs,
   };
 }
 

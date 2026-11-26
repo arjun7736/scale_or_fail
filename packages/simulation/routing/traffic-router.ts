@@ -518,7 +518,10 @@ export function routeTrafficThroughGraph(
   // 6. Calculate Message Queue Buffering
   for (const ctx of serverContexts) {
     if (ctx.connectedQueues.length > 0) {
-      const qShare = Math.floor(ctx.heavyRps / ctx.connectedQueues.length);
+      // Offload asynchronous write mutations (65%) and heavy background requests to message queue
+      const asyncWrites = Math.floor(ctx.writesRps * 0.65);
+      const totalOffloadRps = asyncWrites + ctx.heavyRps;
+      const qShare = Math.floor(totalOffloadRps / ctx.connectedQueues.length);
       for (const q of ctx.connectedQueues) {
         queueDemandMap.set(q.id, (queueDemandMap.get(q.id) || 0) + qShare);
         recordEdgeFlow(ctx.server.id, q.id, qShare, 2, 'healthy');
@@ -637,19 +640,19 @@ export function routeTrafficThroughGraph(
     // Writes must hit Primary DB
     const primaryDb = ctx.connectedDbs.find((d) => (d.config as import('../core/types').DatabaseNodeConfig).role === 'primary');
     if (primaryDb) {
-      // If server is connected to MQ/Kafka, heavy writes are offloaded
-      const netWrites = ctx.connectedQueues.length > 0 ? Math.floor(effectiveWrites * 0.7) : effectiveWrites;
-      dbWriteDemandMap.set(primaryDb.id, (dbWriteDemandMap.get(primaryDb.id) || 0) + netWrites);
-      dbThreadDemandMap.set(primaryDb.id, (dbThreadDemandMap.get(primaryDb.id) || 0) + 15);
+      // If server is connected to MQ/Kafka, 65% of writes were offloaded to queue; only 35% are direct synchronous ACID writes
+      const directSyncWrites = ctx.connectedQueues.length > 0 ? Math.floor(effectiveWrites * 0.35) : effectiveWrites;
+      dbWriteDemandMap.set(primaryDb.id, (dbWriteDemandMap.get(primaryDb.id) || 0) + directSyncWrites);
+      dbThreadDemandMap.set(primaryDb.id, (dbThreadDemandMap.get(primaryDb.id) || 0) + (ctx.connectedQueues.length > 0 ? 5 : 15));
       const writeSource = shardingRouter ? shardingRouter.id : ctx.server.id;
-      recordEdgeFlow(writeSource, primaryDb.id, netWrites, 12, 'healthy');
+      recordEdgeFlow(writeSource, primaryDb.id, directSyncWrites, 12, 'healthy');
 
       // Record WAL replication stream to attached read replicas
       const replicaTargets = (outgoingEdges.get(primaryDb.id) || [])
         .map((e) => nodeMap.get(e.target)!)
         .filter((n) => n && n.type === 'database' && (n.config as any)?.role === 'replica');
       for (const rDb of replicaTargets) {
-        recordEdgeFlow(primaryDb.id, rDb.id, netWrites, 5, 'healthy');
+        recordEdgeFlow(primaryDb.id, rDb.id, directSyncWrites, 5, 'healthy');
       }
     }
 

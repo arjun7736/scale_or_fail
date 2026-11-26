@@ -144,9 +144,10 @@ export function calculateDatabaseCapacity(
     : config.readLatencyMs;
   const effectiveWriteLatencyMs = config.writeLatencyMs;
 
-  // IOPS calculation: writes cost significantly more IOPS due to WAL and locking
+  // IOPS calculation: writes cost significantly more IOPS due to WAL and locking.
+  // Query Index Optimization enables compound indexing and WAL group commits, cutting write IOPS overhead.
   const readIopsPerReq = 1.2 / indexMultiplier;
-  const writeIopsPerReq = 4.0;
+  const writeIopsPerReq = config.queryOptimizationIndex ? 2.2 : 3.8;
   const totalIopsDemanded = readRps * readIopsPerReq + writeRps * writeIopsPerReq;
 
   const iopsUtilization = Math.min(1.0, totalIopsDemanded / Math.max(1, config.maxIops));
@@ -158,11 +159,11 @@ export function calculateDatabaseCapacity(
   // Database connections: active connections scale with upstream threads querying the DB.
   // With Connection Pooling (PgBouncer), worker threads share multiplexed pooled backend connections:
   const threadRatio = config.connectionPooling
-    ? 0.08
+    ? 0.05
     : config.role === 'primary'
     ? 0.35
     : 0.25;
-  const throughputRatio = config.connectionPooling ? 0.01 : 0.04;
+  const throughputRatio = config.connectionPooling ? 0.002 : 0.04;
 
   const estimatedConnectionsDemanded = Math.ceil(
     upstreamActiveThreads * threadRatio + (readRps + writeRps) * throughputRatio

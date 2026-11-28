@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,12 +8,14 @@ import {
   BackgroundVariant,
   useReactFlow,
   ReactFlowProvider,
+  type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Play, Pause, Wrench, ShieldCheck } from 'lucide-react';
+import { Play, Pause, ShieldCheck } from 'lucide-react';
 
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
+import { GroupedConnections, groupConnections } from './edges/GroupedConnections';
 import { useArchitectureStore } from '@/stores/architectureStore';
 import { useGameStore } from '@/stores/gameStore';
 import { ComponentType } from '@/packages/simulation/core/types';
@@ -25,6 +27,12 @@ function CanvasInternal() {
 
   const nodes = useArchitectureStore((s) => s.nodes);
   const edges = useArchitectureStore((s) => s.edges);
+  const [showIndividualWires, setShowIndividualWires] = useState(false);
+  const grouped = useMemo(() => groupConnections(nodes, edges), [nodes, edges]);
+  const visibleEdges = useMemo(() => showIndividualWires || !grouped.hiddenEdgeIds.size
+    ? edges
+    : edges.map((edge) => grouped.hiddenEdgeIds.has(edge.id) ? { ...edge, hidden: true } : edge),
+  [edges, grouped, showIndividualWires]);
   const onNodesChange = useArchitectureStore((s) => s.onNodesChange);
   const onEdgesChange = useArchitectureStore((s) => s.onEdgesChange);
   const onConnect = useArchitectureStore((s) => s.onConnect);
@@ -62,7 +70,7 @@ function CanvasInternal() {
 
   // Sync graph to simulation engine after connections or deletions
   const handleConnect = useCallback(
-    (connection: any) => {
+    (connection: Connection) => {
       onConnect(connection);
       setTimeout(() => syncGraph(), 50);
     },
@@ -122,6 +130,16 @@ function CanvasInternal() {
             </span>
           )}
         </button>
+        {grouped.routes.length > 0 && (
+          <button
+            type="button"
+            aria-pressed={showIndividualWires}
+            onClick={() => setShowIndividualWires((show) => !show)}
+            className="rounded-xl border border-slate-700 bg-slate-950/90 px-2.5 py-1 font-mono text-[10px] font-semibold text-slate-300 hover:border-teal-500/60 hover:text-white cursor-pointer"
+          >
+            Individual wires
+          </button>
+        )}
       </div>
 
       {/* Floating Architecture Scaling / Maintenance HUD - Docked top-right to prevent banner collision */}
@@ -186,12 +204,12 @@ function CanvasInternal() {
 
       <ReactFlow
         nodes={nodes}
-        edges={edges}
-        onNodesChange={(changes: any) => {
+        edges={visibleEdges}
+        onNodesChange={(changes) => {
           onNodesChange(changes);
           syncGraph();
         }}
-        onEdgesChange={(changes: any) => {
+        onEdgesChange={(changes) => {
           onEdgesChange(changes);
           syncGraph();
         }}
@@ -210,6 +228,7 @@ function CanvasInternal() {
         preventScrolling={false}
         proOptions={{ hideAttribution: true }}
       >
+        {!showIndividualWires && <GroupedConnections layout={grouped} edgeIssues={validationResult?.edgeIssuesMap} />}
         <Background
           variant={BackgroundVariant.Dots}
           gap={18}

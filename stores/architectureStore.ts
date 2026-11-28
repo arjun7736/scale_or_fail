@@ -8,6 +8,7 @@ import {
   addEdge,
 } from '@xyflow/react';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/system';
+import { getArchitectureGroup } from '../lib/architecture-groups';
 import {
   ArchitectureGraph,
   ArchitectureNode,
@@ -52,6 +53,70 @@ export interface ArchitectureState {
 let onArchitectureEditCallback: (() => void) | null = null;
 export function registerArchitectureEditListener(cb: () => void) {
   onArchitectureEditCallback = cb;
+}
+
+function toArchitectureNode(node: Node): ArchitectureNode {
+  return {
+    id: node.id,
+    type: (node.type ?? node.data.type) as ComponentType,
+    label: (node.data.label as string) || node.id,
+    config: node.data.config as ArchitectureNode['config'],
+    position: node.position,
+  };
+}
+
+function inheritGroupConnections(node: ArchitectureNode, nodes: Node[], edges: Edge[], primaryId?: string): Edge[] {
+  const group = getArchitectureGroup(node.type, node.config);
+  if (!group) return [];
+
+  const existing = nodes.map(toArchitectureNode);
+  const byId = new Map(existing.map((peer) => [peer.id, peer]));
+  const peers = new Set(existing.filter((peer) => getArchitectureGroup(peer.type, peer.config) === group).map((peer) => peer.id));
+  let inherited: Edge[] = [];
+
+  const connect = (source: ArchitectureNode, target: ArchitectureNode, template?: Edge) => {
+    const classification = classifyConnection(source, target);
+    if (!classification.isValid) return;
+    inherited = addEdge({
+      id: `e-inherited-${node.id}-${inherited.length}`,
+      source: source.id,
+      target: target.id,
+      sourceHandle: template?.sourceHandle,
+      targetHandle: template?.targetHandle,
+      type: 'animatedFlow',
+      animated: true,
+      data: { ...classification },
+    }, inherited);
+  };
+
+  for (const edge of edges) {
+    if (edge.data?.isValid === false || edge.data?.edgeType === 'unsupported') continue;
+    const fromPeer = peers.has(edge.source);
+    const toPeer = peers.has(edge.target);
+    if (fromPeer === toPeer) continue;
+    const external = byId.get(fromPeer ? edge.target : edge.source);
+    if (!external || (primaryId && edge.data?.edgeType === 'replication' && external.id !== primaryId)) continue;
+    if (fromPeer) connect(node, external, edge);
+    else connect(external, node, edge);
+  }
+
+  if (group === 'replicas') {
+    const primary = existing.find((peer) => peer.id === primaryId || (
+      !primaryId && peer.type === 'database' && getArchitectureGroup(peer.type, peer.config) !== 'replicas'
+    ));
+    if (primary && !inherited.some((edge) => edge.data?.edgeType === 'replication')) connect(primary, node);
+    if (primary && peers.size === 0) {
+      for (const edge of edges) {
+        const source = byId.get(edge.source);
+        if (edge.target === primary.id && source?.type === 'app_server' &&
+            edge.data?.isValid !== false && edge.data?.edgeType !== 'unsupported') {
+          connect(source, node);
+        }
+      }
+    }
+  }
+
+  return inherited;
 }
 
 // Convert domain architecture graph into React Flow format
@@ -187,7 +252,9 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         return null;
       }
 
-      const id = `${type}-${Date.now().toString(36).slice(-4)}`;
+      const baseId = `${type}-${Date.now().toString(36)}`;
+      let id = baseId;
+      for (let suffix = 2; get().nodes.some((node) => node.id === id); suffix++) id = `${baseId}-${suffix}`;
       let config: any;
       let label = type.replace('_', ' ').toUpperCase();
 
@@ -281,15 +348,17 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
 
       set((state) => ({
         nodes: [...state.nodes, flowNode],
+        edges: [...state.edges, ...inheritGroupConnections(archNode, state.nodes, state.edges)],
         selectedNodeId: id,
       }));
 
       onArchitectureEditCallback?.();
+      get().validateCurrentGraph();
       return archNode;
     },
 
     addReadReplica: (primaryDbId?: string) => {
-      const { nodes, edges } = get();
+      const { nodes } = get();
       const currentNodes = nodes.map((n) => ({
         type: (n.type || n.data?.type) as ComponentType,
         config: n.data?.config,
@@ -320,7 +389,9 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         y: basePos.y + (replicaCount * 95) - 30,
       };
 
-      const id = `db-replica-${Date.now().toString(36).slice(-4)}`;
+      const baseId = `db-replica-${Date.now().toString(36)}`;
+      let id = baseId;
+      for (let suffix = 2; nodes.some((node) => node.id === id); suffix++) id = `${baseId}-${suffix}`;
       const config = DEFAULT_CONFIGS.database('replica', 'small');
       const label = replicaCount > 0 ? `Read Replica ${replicaCount + 1}` : 'Read Replica';
 
@@ -343,44 +414,9 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
         },
       };
 
-      // Connect replication and incoming read query edges
-      const newEdges: Edge[] = [];
-      if (primaryNode) {
-        // 1. Establish WAL Replication Stream from Primary DB to Read Replica
-        newEdges.push({
-          id: `e-repl-${primaryNode.id}-${id}-${Date.now().toString(36).slice(-4)}`,
-          source: primaryNode.id,
-          target: id,
-          type: 'animatedFlow',
-          animated: true,
-          data: {
-            label: 'Replication (WAL)',
-            edgeType: 'replication',
-            isValid: true,
-          },
-        });
-
-        // 2. Connect incoming read traffic from upstream App Servers
-        const incomingEdges = edges.filter((e) => e.target === primaryNode!.id);
-        incomingEdges.forEach((incEdge) => {
-          newEdges.push({
-            id: `e-${incEdge.source}-${id}-${Date.now().toString(36).slice(-4)}`,
-            source: incEdge.source,
-            target: id,
-            type: 'animatedFlow',
-            animated: true,
-            data: {
-              label: 'Database Read (Replica)',
-              edgeType: 'db_read',
-              isValid: true,
-            },
-          });
-        });
-      }
-
       set((state) => ({
         nodes: [...state.nodes, flowNode],
-        edges: [...state.edges, ...newEdges],
+        edges: [...state.edges, ...inheritGroupConnections(archNode, state.nodes, state.edges, primaryNode?.id)],
         selectedNodeId: id,
       }));
 
@@ -440,13 +476,7 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => {
 
     getArchitectureGraph: () => {
       const { nodes, edges } = get();
-      const archNodes: ArchitectureNode[] = nodes.map((n) => ({
-        id: n.id,
-        type: (n.type || (n.data?.type as ComponentType)) as ComponentType,
-        label: (n.data?.label as string) || n.id,
-        config: n.data?.config as any,
-        position: n.position,
-      }));
+      const archNodes = nodes.map(toArchitectureNode);
 
       const archEdges: ArchitectureEdge[] = edges.map((e) => ({
         id: e.id,
